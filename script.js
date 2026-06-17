@@ -23,6 +23,11 @@ const platforms = [
     { x: 824, y: 250, width: 150, height: 20, downable: true },
 ];
 
+const characters = [
+    new Player(100, 300, '#3498db', { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o' }, 1),
+    new Bot(880, 300, '#e74c3c', 2),
+];
+
 // Projectiles array
 let existingArrows = [];
 
@@ -520,11 +525,6 @@ class Bot {
         }
     }
 }
-
-const characters = [
-    new Player(100, 300, '#3498db', { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'x', bow: 'c' }, 1),
-    new Bot(880, 300, '#e74c3c', 2),
-];
 
 function updateUI() {
     characters.forEach(p => {
