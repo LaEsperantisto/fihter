@@ -6,13 +6,15 @@ const GRAVITY = 0.5;
 const ARROW_GRAVITY = 0.15;
 const MAX_CHARGE = 100;
 const CHARGE_SPEED = 2;
-const MAX_LIVES = 5;
+
+let currentMatchMaxLives = 5;
 
 // Game State Engine Variables
 let gameStarted = false;
 let gameMode = 'menu'; // 'menu', 'bot', 'multiplayer'
 let characters = [];
 let localPlayerSlot = 0; // Index of the local browser entity in characters array
+let isAutorestart = false;
 
 // PeerJS Networking Variables
 let peer = null;
@@ -25,14 +27,153 @@ window.addEventListener('keydown', (e) => keys[e.key] = true);
 window.addEventListener('keyup', (e) => keys[e.key] = false);
 
 // Arena Structure
-const platforms = [
-    { x: 0, y: 536, width: 1024, height: 40, downable: false },
-    { x: 150, y: 400, width: 250, height: 20, downable: true },
-    { x: 624, y: 400, width: 250, height: 20, downable: true },
-    { x: 387, y: 290, width: 250, height: 20, downable: true },
-    { x: 50, y: 250, width: 150, height: 20, downable: true }, 
-    { x: 824, y: 250, width: 150, height: 20, downable: true },
+const levels = [
+    // Level 1: Your Original Arena (Balanced Platforms)
+    [
+        { x: 0, y: 536, width: 1024, height: 40, downable: false },
+        { x: 150, y: 400, width: 250, height: 20, downable: true },
+        { x: 624, y: 400, width: 250, height: 20, downable: true },
+        { x: 387, y: 290, width: 250, height: 20, downable: true },
+        { x: 50, y: 250, width: 150, height: 20, downable: true },
+        { x: 824, y: 250, width: 150, height: 20, downable: true },
+    ],
+    // Level 2: The Hourglass (Central Chokepoint)
+    [
+        { x: 0, y: 536, width: 1024, height: 40, downable: false },
+        { x: 50, y: 420, width: 300, height: 20, downable: true },
+        { x: 674, y: 420, width: 300, height: 20, downable: true },
+        { x: 362, y: 300, width: 300, height: 20, downable: true },
+        { x: 150, y: 180, width: 200, height: 20, downable: true },
+        { x: 674, y: 180, width: 200, height: 20, downable: true },
+    ],
+    // Level 3: Vertical Spires (Sniper Towers on the flanks)
+    [
+        { x: 0, y: 536, width: 1024, height: 40, downable: false },
+        { x: 100, y: 410, width: 120, height: 20, downable: true },
+        { x: 100, y: 280, width: 120, height: 20, downable: true },
+        { x: 804, y: 410, width: 120, height: 20, downable: true },
+        { x: 804, y: 280, width: 120, height: 20, downable: true },
+        { x: 362, y: 340, width: 300, height: 20, downable: true },
+        { x: 462, y: 200, width: 100, height: 20, downable: true },
+    ],
+    // Level 4: The Colosseum (Stepped tiers on both sides)
+    [
+        { x: 0, y: 536, width: 1024, height: 40, downable: false },
+        { x: 0, y: 430, width: 200, height: 20, downable: false },
+        { x: 0, y: 320, width: 150, height: 20, downable: false },
+        { x: 0, y: 210, width: 100, height: 20, downable: false },
+        { x: 824, y: 430, width: 200, height: 20, downable: false },
+        { x: 874, y: 320, width: 150, height: 20, downable: false },
+        { x: 924, y: 210, width: 100, height: 20, downable: false },
+        { x: 312, y: 260, width: 150, height: 20, downable: true },
+        { x: 562, y: 260, width: 150, height: 20, downable: true },
+    ],
+    // Level 5: Grid Lockdown (An ordered matrix of platforms)
+    [
+        { x: 0, y: 536, width: 1024, height: 40, downable: false },
+        { x: 80, y: 420, width: 180, height: 20, downable: true },
+        { x: 422, y: 420, width: 180, height: 20, downable: true },
+        { x: 764, y: 420, width: 180, height: 20, downable: true },
+        { x: 251, y: 260, width: 180, height: 20, downable: true },
+        { x: 593, y: 260, width: 180, height: 20, downable: true },
+    ],
+    // Level 6: The Pit (Large gap in the solid floor)
+    [
+        { x: 0, y: 536, width: 350, height: 40, downable: false },
+        { x: 674, y: 536, width: 350, height: 40, downable: false },
+        { x: 412, y: 430, width: 200, height: 20, downable: true },
+        { x: 150, y: 310, width: 200, height: 20, downable: true },
+        { x: 674, y: 310, width: 200, height: 20, downable: true },
+        { x: 387, y: 190, width: 250, height: 20, downable: true },
+    ],
+    // Level 7: The Twin Cottages (Two hollow houses you can go inside or jump on top of)
+    [
+        { x: 0, y: 536, width: 1024, height: 40, downable: false },
+        // Left House: Walls & Floor
+        { x: 100, y: 380, width: 20, height: 160, downable: false }, // Left wall
+        { x: 260, y: 380, width: 20, height: 160, downable: false }, // Right wall
+        { x: 120, y: 450, width: 140, height: 15, downable: true },  // Second floor inside
+        // Left House: Stepped Triangular Roof
+        { x: 80, y: 380, width: 220, height: 20, downable: false },  // Roof Base
+        { x: 110, y: 350, width: 160, height: 30, downable: false }, // Roof Mid
+        { x: 150, y: 320, width: 80, height: 30, downable: false },  // Roof Peak
+
+        // Right House: Walls & Floor
+        { x: 744, y: 380, width: 20, height: 160, downable: false }, 
+        { x: 904, y: 380, width: 20, height: 160, downable: false }, 
+        { x: 764, y: 450, width: 140, height: 15, downable: true },  
+        // Right House: Stepped Triangular Roof
+        { x: 724, y: 380, width: 220, height: 20, downable: false }, 
+        { x: 754, y: 350, width: 160, height: 30, downable: false }, 
+        { x: 794, y: 320, width: 80, height: 30, downable: false },
+
+        // Center connecting courtyard bridge
+        { x: 387, y: 330, width: 250, height: 20, downable: true }
+    ],
+    // Level 8: Windmill Ridge (A tall central tower with offset platforms representing blades)
+    [
+        { x: 0, y: 536, width: 1024, height: 40, downable: false },
+        // Main Windmill Tower body
+        { x: 462, y: 220, width: 100, height: 320, downable: false }, // Heavy central block
+        { x: 432, y: 200, width: 160, height: 20, downable: false },  // Windmill cap roof
+        
+        // Blade Platforms (Simulating cross sails at different angles/heights)
+        { x: 262, y: 290, width: 200, height: 15, downable: true },  // Left horizontal blade
+        { x: 562, y: 290, width: 200, height: 15, downable: true },  // Right horizontal blade
+        { x: 392, y: 120, width: 70, height: 15, downable: true },   // Upper left angled blade perch
+        { x: 562, y: 120, width: 70, height: 15, downable: true },   // Upper right angled blade perch
+
+        // Side auxiliary hills to reach the blades
+        { x: 50, y: 410, width: 160, height: 20, downable: true },
+        { x: 814, y: 410, width: 160, height: 20, downable: true }
+    ],
+    // Level 9: Broken Clocktower (Ruins with a large high platform and crumbling inner steps)
+    [
+        { x: 0, y: 536, width: 1024, height: 40, downable: false },
+        // Left Support Pier
+        { x: 120, y: 250, width: 40, height: 290, downable: false },
+        // Right Support Pier
+        { x: 864, y: 250, width: 40, height: 290, downable: false },
+        // Massive High Roof / Archway span
+        { x: 120, y: 230, width: 784, height: 25, downable: false },
+        
+        // Crumbling interior steps (Hollow area inside the arch)
+        { x: 220, y: 440, width: 100, height: 15, downable: true },
+        { x: 360, y: 370, width: 100, height: 15, downable: true },
+        { x: 564, y: 370, width: 100, height: 15, downable: true },
+        { x: 704, y: 440, width: 100, height: 15, downable: true },
+        
+        // Top Spire platform on the very center of the roof
+        { x: 462, y: 140, width: 100, height: 90, downable: false }
+    ],
+    // Level 10: The Multi-Story Apartment (A huge grid of nested rooms and walls)
+    [
+        { x: 0, y: 536, width: 1024, height: 40, downable: false },
+        // Ground level interior partitions
+        { x: 300, y: 410, width: 20, height: 130, downable: false },
+        { x: 704, y: 410, width: 20, height: 130, downable: false },
+        
+        // Level 2 Floor
+        { x: 150, y: 410, width: 724, height: 20, downable: false },
+        // Level 2 partitions
+        { x: 440, y: 280, width: 20, height: 130, downable: false },
+        { x: 564, y: 280, width: 20, height: 130, downable: false },
+        
+        // Level 3 Floor
+        { x: 250, y: 280, width: 524, height: 20, downable: false },
+        // Outer balconies
+        { x: 50, y: 320, width: 100, height: 15, downable: true },
+        { x: 874, y: 320, width: 100, height: 15, downable: true }
+    ]
 ];
+
+let level;
+
+function chooseRandomLevel() {
+    level = levels[Math.floor(Math.random() * levels.length)];
+}
+
+chooseRandomLevel();
 
 let existingArrows = [];
 
@@ -56,7 +197,7 @@ class Arrow {
         this.draw();
 
         let hitPlatform = false;
-        for (let plat of platforms) {
+        for (let plat of level) {
             if (this.x < plat.x + plat.width && this.x + this.width > plat.x &&
                 this.y < plat.y + plat.height && this.y + this.height > plat.y) {
                 hitPlatform = true;
@@ -93,16 +234,12 @@ class Arrow {
                     if (targetX + owner.width > canvas.width) targetX = canvas.width - owner.width;
                     if (targetY < 0) targetY = 0;
 
-                    for (let plat of platforms) {
+                    for (let plat of level) {
                         if (targetX < plat.x + plat.width &&
                             targetX + owner.width > plat.x &&
                             targetY < plat.y + plat.height &&
                             targetY + owner.height > plat.y) {
-                            if (targetY + owner.height / 2 < plat.y + plat.height / 2) {
-                                targetY = plat.y - owner.height; 
-                            } else {
-                                targetY = plat.y + plat.height;
-                            }
+                            targetY = plat.y - owner.height;
                         }
                     }
 
@@ -141,7 +278,7 @@ class Player {
         this.grounded = false;
         this.direction = x < canvas.width / 2 ? 1 : -1;
 
-        this.lives = MAX_LIVES;
+        this.lives = currentMatchMaxLives;
         this.isAttackingSword = false;
         this.swordTimer = 0;
         this.isChargingBow = false;
@@ -249,10 +386,10 @@ class Player {
         if (this.x < 0) this.x = 0;
         if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
 
-        for (let plat of platforms) {
+        for (let plat of level) {
             if (plat.downable && this.isPressingDown) continue;
-            if (this.x < plat.x + plat.width &&
-                this.x + this.width > plat.x &&
+            if (this.x <= plat.x + plat.width &&
+                this.x + this.width >= plat.x &&
                 this.y + this.height >= plat.y &&
                 this.y + this.height - this.vy <= plat.y + 10 &&
                 this.vy >= 0) {
@@ -333,7 +470,7 @@ class Bot {
         this.grounded = false;
         this.direction = x < canvas.width / 2 ? 1 : -1;
 
-        this.lives = MAX_LIVES;
+        this.lives = currentMatchMaxLives;
         this.isAttackingSword = false;
         this.currentSwordDelay = 0;
         this.swordTimer = 0;
@@ -484,7 +621,7 @@ class Bot {
         if (this.x < 0) this.x = 0;
         if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
 
-        for (let plat of platforms) {
+        for (let plat of level) {
             if (plat.downable && this.isPressingDown) continue;
             if (this.x < plat.x + plat.width &&
                 this.x + this.width > plat.x &&
@@ -549,15 +686,19 @@ function startBotGame() {
     gameStarted = true;
     localPlayerSlot = 0;
     
-    // Both players use identical configurations/keybinds, mapped differently by class instances
+    // Grab the custom starting lives right as the game triggers
+    const livesInput = document.getElementById('lives-picker');
+    currentMatchMaxLives = livesInput ? parseInt(livesInput.value, 10) : 5;
+    
     const sharedControls = { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o' };
     characters = [
         new Player(100, 300, '#3498db', sharedControls, 1),
         new Bot(880, 300, '#e74c3c', 2)
     ];
-
-    const multiplayerStatusDiv = document.getElementById('multiplayer-status');
-    multiplayerStatusDiv.innerText = "";
+    
+    // Override standard instance defaults with selected settings
+    characters[0].lives = currentMatchMaxLives;
+    characters[1].lives = currentMatchMaxLives;
     
     updateUI();
 }
@@ -619,19 +760,29 @@ function setupNetworkEvents() {
     conn.on('open', () => {
         document.getElementById('multiplayer-status').innerText = "Connected! Starting game...";
         
+        const livesInput = document.getElementById('lives-picker');
+        currentMatchMaxLives = livesInput ? parseInt(livesInput.value, 10) : 5;
+        
+        const sharedControls = { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o' };
+        
         if (isHost) {
             localPlayerSlot = 0;
             characters = [
                 new Player(100, 300, '#3498db', sharedControls, 1),
-                new Player(880, 300, '#e74c3c', {}, 2) // Dummy keys for remote player
+                new Player(880, 300, '#e74c3c', {}, 2)
             ];
+            // Send chosen settings payload to remote peer immediately
+            conn.send({ type: 'sync_lives', value: currentMatchMaxLives });
         } else {
             localPlayerSlot = 1;
             characters = [
-                new Player(100, 300, '#3498db', {}, 1), // Dummy keys for remote player
+                new Player(100, 300, '#3498db', {}, 1),
                 new Player(880, 300, '#e74c3c', sharedControls, 2)
             ];
         }
+        
+        characters[0].lives = currentMatchMaxLives;
+        characters[1].lives = currentMatchMaxLives;
         
         gameStarted = true;
         updateUI();
@@ -642,7 +793,15 @@ function setupNetworkEvents() {
         
         const remoteSlot = localPlayerSlot === 0 ? 1 : 0;
         
-        if (payload.type === 'state') {
+        if (payload.type === 'sync_lives') {
+            currentMatchMaxLives = payload.value;
+            if (characters[0] && characters[1]) {
+                characters[0].lives = currentMatchMaxLives;
+                characters[1].lives = currentMatchMaxLives;
+                updateUI();
+            }
+        }
+        else if (payload.type === 'state') {
             // Sync positional data of remote instance
             characters[remoteSlot].x = payload.x;
             characters[remoteSlot].y = payload.y;
@@ -718,8 +877,8 @@ function checkSwordCollisions() {
 
 function gameLoop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#7f8c8d';
-    for (let plat of platforms) {
+    for (let plat of level) {
+        ctx.fillStyle = plat.downable ? '#ff8b8b' : '#7f8c8d';
         ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
     }
 
@@ -762,6 +921,10 @@ function gameLoop() {
             menu.classList.add("hidden");
         }
     } else {
+        if (isAutorestart) {
+            resetGame();
+            startBotGame();
+        }
         const menu = document.getElementById("menu");
         if (menu && menu.classList.contains("hidden")) {
             menu.classList.remove("hidden");
@@ -785,8 +948,15 @@ function resetGame() {
         window.location.reload();
         return;
     }
+    else {
+        chooseRandomLevel();
+    }
     startBotGame();
     document.getElementById('game-status').innerText = "BATTLE!";
+}
+
+function autorestart() {
+    isAutorestart = true;
 }
 
 // Check on boot if player loaded the link directly with a room hash
