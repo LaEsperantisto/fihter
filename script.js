@@ -58,7 +58,7 @@ class Arrow {
         // 2. Uniform Target Collision Math
         let hitTarget = false;
         for (let target of characters) {
-            if (target.id !== this.ownerId && !target.isDead) {
+            if (!target.isDead) {
                 if (this.x < target.x + target.width &&
                     this.x + this.width > target.x &&
                     this.y < target.y + target.height &&
