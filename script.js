@@ -8,6 +8,17 @@ const MAX_CHARGE = 100;
 const CHARGE_SPEED = 2;
 const MAX_LIVES = 5;
 
+// Game State Engine Variables
+let gameStarted = false;
+let gameMode = 'menu'; // 'menu', 'bot', 'multiplayer'
+let characters = [];
+let localPlayerSlot = 0; // Index of the local browser entity in characters array
+
+// PeerJS Networking Variables
+let peer = null;
+let conn = null;
+let isHost = false;
+
 // Keyboard input tracking
 const keys = {};
 window.addEventListener('keydown', (e) => keys[e.key] = true);
@@ -23,7 +34,6 @@ const platforms = [
     { x: 824, y: 250, width: 150, height: 20, downable: true },
 ];
 
-// Projectiles array
 let existingArrows = [];
 
 class Arrow {
@@ -32,7 +42,7 @@ class Arrow {
         this.y = y;
         this.vx = vx;
         this.vy = vy;
-        this.ownerId = ownerId; // Track owner by unique ID
+        this.ownerId = ownerId;
         this.width = width;
         this.height = height;
         this.type = type;
@@ -45,7 +55,6 @@ class Arrow {
 
         this.draw();
 
-        // 1. Uniform Platform Collision Math
         let hitPlatform = false;
         for (let plat of platforms) {
             if (this.x < plat.x + plat.width && this.x + this.width > plat.x &&
@@ -55,7 +64,6 @@ class Arrow {
             }
         }
 
-        // 2. Uniform Target Collision Math
         let hitTarget = false;
         for (let target of characters) {
             if (!target.isDead) {
@@ -64,7 +72,10 @@ class Arrow {
                     this.y < target.y + target.height &&
                     this.y + this.height > target.y) {
                 
-                    target.takeDamage();
+                    // In multiplayer mode, only the host registers target damage to maintain consistency
+                    if (gameMode !== 'multiplayer' || isHost) {
+                        target.takeDamage();
+                    }
                     hitTarget = true;
                     break;
                 }
@@ -75,33 +86,26 @@ class Arrow {
             if (this.type === 'teleport') {
                 const owner = characters.find(c => c.id === this.ownerId);
                 if (owner) {
-                    // Start by centering the player on the arrow's impact point
                     let targetX = this.x - owner.width / 2;
                     let targetY = this.y - owner.height / 2;
 
-                    // Bound checks: Don't teleport players out of the viewport boundaries
                     if (targetX < 0) targetX = 0;
                     if (targetX + owner.width > canvas.width) targetX = canvas.width - owner.width;
                     if (targetY < 0) targetY = 0;
 
-                    // Platform Unclipping Phase: Check if the destination overlaps any platform
                     for (let plat of platforms) {
                         if (targetX < plat.x + plat.width &&
                             targetX + owner.width > plat.x &&
                             targetY < plat.y + plat.height &&
                             targetY + owner.height > plat.y) {
-                            
-                            // If colliding, prioritize pushing the character up onto the surface
                             if (targetY + owner.height / 2 < plat.y + plat.height / 2) {
                                 targetY = plat.y - owner.height; 
                             } else {
-                                // Otherwise, if it hits the bottom half of a platform, push them below it
                                 targetY = plat.y + plat.height;
                             }
                         }
                     }
 
-                    // Apply the safe, adjusted coordinates to the owner
                     owner.x = targetX;
                     owner.y = targetY;
                     owner.vx = 0;
@@ -113,7 +117,7 @@ class Arrow {
     }
 
     draw() {
-        ctx.fillStyle = this.type === 'teleport' ? '#9b59b6' : '#ecf0f1'; // Teleport arrows get a cool purple color tint
+        ctx.fillStyle = this.type === 'teleport' ? '#9b59b6' : '#ecf0f1';
         ctx.fillRect(this.x, this.y, this.width, this.height);
     }
 }
@@ -146,11 +150,10 @@ class Player {
         this.respawnTimer = 0;
 
         this.chosenArrow = 'default';
-
         this.isPressingDown = false;
     }
 
-    update(characters) {
+    update() {
         if (this.isDead) {
             this.respawnTimer--;
             if (this.respawnTimer <= 0 && this.lives > 0) {
@@ -209,7 +212,9 @@ class Player {
         }
 
         const chosenArrowDiv = document.getElementById('p1-chosen-arrow');
-        chosenArrowDiv.innerHTML = this.chosenArrow;
+        if (chosenArrowDiv && this.id === characters[localPlayerSlot].id) {
+            chosenArrowDiv.innerHTML = this.chosenArrow;
+        }
 
         this.x += this.vx;
         this.y += this.vy;
@@ -218,17 +223,24 @@ class Player {
     }
 
     shootArrow() {
-        let power = (this.bowCharge / MAX_CHARGE) * 15 + 5; 
-        existingArrows.push(new Arrow(
-            this.direction === 1 ? this.x + this.width : this.x - 15,
-            this.y + this.height / 2 - 2,
-            this.direction * power,
-            -power * 0.15,
-            this.id,
-            15,
-            4,
-            this.chosenArrow,
-        ));
+        let power = (this.bowCharge / MAX_CHARGE) * 15 + 5;
+        let arrowData = {
+            x: this.direction === 1 ? this.x + this.width : this.x - 15,
+            y: this.y + this.height / 2 - 2,
+            vx: this.direction * power,
+            vy: -power * 0.15,
+            ownerId: this.id,
+            width: 15,
+            height: 4,
+            type: this.chosenArrow
+        };
+
+        existingArrows.push(new Arrow(arrowData.x, arrowData.y, arrowData.vx, arrowData.vy, arrowData.ownerId, arrowData.width, arrowData.height, arrowData.type));
+
+        // Sync projectile to peer
+        if (gameMode === 'multiplayer' && conn && conn.open) {
+            conn.send({ type: 'projectile', data: arrowData });
+        }
     }
 
     handleCollisions() {
@@ -261,6 +273,10 @@ class Player {
         this.isDead = true;
         this.respawnTimer = 90;
         updateUI();
+
+        if (gameMode === 'multiplayer' && conn && conn.open) {
+            conn.send({ type: 'life_update', id: this.id, lives: this.lives });
+        }
     }
 
     respawn() {
@@ -298,6 +314,7 @@ class Player {
     }
 }
 
+// Keep your original Bot logic perfectly intact
 class Bot {
     constructor(x, y, color, id) {
         this.id = id;
@@ -374,7 +391,7 @@ class Bot {
                         if (move === 3) {
                             this.chosenArrow = Math.random() >= 0.5 ? 'teleport' : 'default';
                             const chosenArrowDiv = document.getElementById('p1-chosen-arrow')
-                            chosenArrowDiv.innerHTML = this.chosenArrow;
+                            if (chosenArrowDiv) chosenArrowDiv.innerHTML = this.chosenArrow;
                         }
                     }
                 });
@@ -416,8 +433,6 @@ class Bot {
                     break;
                 case 4:
                     this.isPressingDown = true;
-                    break;
-                case 5:
                     break;
             }
             if (move !== 4) this.isPressingDown = false;
@@ -471,7 +486,6 @@ class Bot {
 
         for (let plat of platforms) {
             if (plat.downable && this.isPressingDown) continue;
-            
             if (this.x < plat.x + plat.width &&
                 this.x + this.width > plat.x &&
                 this.y + this.height >= plat.y &&
@@ -506,10 +520,8 @@ class Bot {
 
     draw() {
         if (this.isDead) return;
-
         ctx.fillStyle = this.color;
         ctx.fillRect(this.x, this.y, this.width, this.height);
-
         ctx.fillStyle = '#fff';
         let eyeX = this.direction === 1 ? this.x + this.width - 8 : this.x + 3;
         ctx.fillRect(eyeX, this.y + 8, 5, 5);
@@ -531,6 +543,132 @@ class Bot {
     }
 }
 
+// Game Mode Setup Options
+function startBotGame() {
+    gameMode = 'bot';
+    gameStarted = true;
+    localPlayerSlot = 0;
+    
+    // Both players use identical configurations/keybinds, mapped differently by class instances
+    const sharedControls = { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o' };
+    characters = [
+        new Player(100, 300, '#3498db', sharedControls, 1),
+        new Bot(880, 300, '#e74c3c', 2)
+    ];
+
+    const multiplayerStatusDiv = document.getElementById('multiplayer-status');
+    multiplayerStatusDiv.innerText = "";
+    
+    updateUI();
+}
+
+function startMultiplayerGame() {
+    gameMode = 'multiplayer';
+    const statusEl = document.getElementById('multiplayer-status');
+    if (statusEl) statusEl.innerText = "Connecting to matchmaking server...";
+
+    // Generate room identifier based on URL Hash code or standard fallback
+    let roomName = window.location.hash.replace('#', '');
+    if (!roomName) {
+        roomName = "fihter-global-lobby"; 
+    }
+
+    // Connect securely using the PeerJS public default cloud server
+    peer = new Peer();
+
+    peer.on('open', (id) => {
+        if (window.location.hash) {
+            // Act as second joining client connection
+            isHost = false;
+            statusEl.innerText = "Joining host game session...";
+            conn = peer.connect(roomName);
+            setupNetworkEvents();
+        } else {
+            // Act as Host player
+            isHost = true;
+            peer.destroy(); // Free up random ID to claim the deterministic hash room ID
+            peer = new Peer(roomName);
+            peer.on('open', () => {
+                statusEl.innerHTML = `Lobby created! Share this link to play: <br/><b>${window.location.href}#${roomName}</b>`;
+            });
+            peer.on('connection', (connection) => {
+                conn = connection;
+                setupNetworkEvents();
+            });
+        }
+    });
+
+    peer.on('error', (err) => {
+        if (isHost && err.type === 'unavailable-id') {
+            statusEl.innerText = "Lobby full. Automatically joining active match...";
+            isHost = false;
+            peer = new Peer();
+            peer.on('open', () => {
+                conn = peer.connect(roomName);
+                setupNetworkEvents();
+            });
+        } else {
+            statusEl.innerText = "Connection error: " + err.type;
+        }
+    });
+}
+
+function setupNetworkEvents() {
+    const sharedControls = { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o' };
+    
+    conn.on('open', () => {
+        document.getElementById('multiplayer-status').innerText = "Connected! Starting game...";
+        
+        if (isHost) {
+            localPlayerSlot = 0;
+            characters = [
+                new Player(100, 300, '#3498db', sharedControls, 1),
+                new Player(880, 300, '#e74c3c', {}, 2) // Dummy keys for remote player
+            ];
+        } else {
+            localPlayerSlot = 1;
+            characters = [
+                new Player(100, 300, '#3498db', {}, 1), // Dummy keys for remote player
+                new Player(880, 300, '#e74c3c', sharedControls, 2)
+            ];
+        }
+        
+        gameStarted = true;
+        updateUI();
+    });
+
+    conn.on('data', (payload) => {
+        if (!gameStarted) return;
+        
+        const remoteSlot = localPlayerSlot === 0 ? 1 : 0;
+        
+        if (payload.type === 'state') {
+            // Sync positional data of remote instance
+            characters[remoteSlot].x = payload.x;
+            characters[remoteSlot].y = payload.y;
+            characters[remoteSlot].direction = payload.direction;
+            characters[remoteSlot].isAttackingSword = payload.isAttackingSword;
+            characters[remoteSlot].isChargingBow = payload.isChargingBow;
+            characters[remoteSlot].bowCharge = payload.bowCharge;
+        } 
+        else if (payload.type === 'projectile') {
+            existingArrows.push(new Arrow(
+                payload.data.x, payload.data.y, payload.data.vx, payload.data.vy,
+                payload.data.ownerId, payload.data.width, payload.data.height, payload.data.type
+            ));
+        }
+        else if (payload.type === 'life_update') {
+            const targetChar = characters.find(c => c.id === payload.id);
+            if (targetChar) {
+                targetChar.lives = payload.lives;
+                targetChar.isDead = true;
+                targetChar.respawnTimer = 90;
+                updateUI();
+            }
+        }
+    });
+}
+
 function updateUI() {
     characters.forEach(p => {
         const livesEl = document.getElementById(`p${p.id}-lives`);
@@ -541,10 +679,12 @@ function updateUI() {
     });
 
     const activePlayers = characters.filter(p => p.lives > 0);
-    if (activePlayers.length === 1) {
-        document.getElementById('game-status').innerText = `PLAYER ${activePlayers[0].id} WINS!`;
-    } else if (activePlayers.length === 0) {
-        document.getElementById('game-status').innerText = "MUTUAL DESTRUCTION!";
+    if (gameStarted && activePlayers.length <= 1) {
+        if (activePlayers.length === 1) {
+            document.getElementById('game-status').innerText = `PLAYER ${activePlayers[0].id} WINS!`;
+        } else if (activePlayers.length === 0) {
+            document.getElementById('game-status').innerText = "MUTUAL DESTRUCTION!";
+        }
     }
 }
 
@@ -565,7 +705,10 @@ function checkSwordCollisions() {
 
             if (swordX < target.x + target.width && swordX + 20 > target.x &&
                 attacker.y + 15 < target.y + target.height && attacker.y + 25 > target.y) {
-                target.takeDamage();
+                
+                if (gameMode !== 'multiplayer' || isHost) {
+                    target.takeDamage();
+                }
                 attacker.isAttackingSword = false; 
                 break; 
             }
@@ -580,12 +723,34 @@ function gameLoop() {
         ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
     }
 
-    if (running()) {
-        characters.forEach(p => p.update(characters));
+    if (gameStarted && running()) {
+        // Run updates exclusively for the locally controlled entity slot
+        characters[localPlayerSlot].update();
+
+        // Run bot updates locally if playing against bot AI
+        if (gameMode === 'bot') {
+            characters[1].update(characters);
+        }
+
+        // Draw entities globally
         characters.forEach(p => p.draw());
 
         processArrows();
         checkSwordCollisions();
+
+        // Broadcast current local state updates across network interface
+        if (gameMode === 'multiplayer' && conn && conn.open) {
+            const myState = characters[localPlayerSlot];
+            conn.send({
+                type: 'state',
+                x: myState.x,
+                y: myState.y,
+                direction: myState.direction,
+                isAttackingSword: myState.isAttackingSword,
+                isChargingBow: myState.isChargingBow,
+                bowCharge: myState.bowCharge
+            });
+        }
 
         characters.forEach(p => {
             const chargeEl = document.getElementById(`p${p.id}-charge`);
@@ -608,29 +773,25 @@ function gameLoop() {
 }
 
 function running() {
+    if (!gameStarted) return false;
     const aliveCount = characters.filter(p => p.lives > 0).length;
     return aliveCount > 1;
 }
 
 function resetGame() {
-    characters.forEach(p => {
-        p.lives = MAX_LIVES;
-        p.isDead = false;
-        p.x = Math.random() * (canvas.width - 100) + 50;
-        p.y = Math.random() * (canvas.height - 200) + 50;
-        p.vx = 0;
-        p.vy = 0;
-    });
-
-    existingArrows = [];
+    if (gameMode === 'multiplayer') {
+        // Multiplayer resets re-trigger network handshakes instead of basic coordinate shuffles
+        window.location.hash = '';
+        window.location.reload();
+        return;
+    }
+    startBotGame();
     document.getElementById('game-status').innerText = "BATTLE!";
-    updateUI();
 }
 
-const characters = [
-    new Player(100, 300, '#3498db', { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o' }, 1),
-    new Bot(880, 300, '#e74c3c', 2),
-];
+// Check on boot if player loaded the link directly with a room hash
+if (window.location.hash) {
+    startMultiplayerGame();
+}
 
-updateUI();
 gameLoop();

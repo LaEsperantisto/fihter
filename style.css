@@ -116,10 +116,10 @@ canvas {
     letter-spacing: 2px;
 }
 
-#restart-btn {
+button {
     background-color: #2ecc71;
     color: white;
-    border: none;
+    border-color: #000000;
     padding: 12px 30px;
     font-family: 'Courier New', Courier, monospace;
     font-size: 18px;
@@ -129,11 +129,21 @@ canvas {
     transition: background 0.2s;
 }
 
-#restart-btn:hover {
+.info {
+    color: white;
+    border-color: #000000;
+    padding: 12px 30px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+button:hover {
     background-color: #27ae60;
 }
 
-/* Override flex display when hidden */
 #menu.hidden {
     display: none;
 }

@@ -5,21 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fihter</title>
     <link rel="stylesheet" href="style.css">
+
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body>
     <div id="ui-container">
         <div id="p1-hud" class="hud">
             <h2>Player 1 (Blue)</h2>
-            <div id="p1-lives" class="lives">❤❤</div>
+            <div id="p1-lives" class="lives">❤❤❤❤❤</div>
             <div class="charge-bar-container"><div id="p1-charge" class="charge-bar"></div></div>
-            <div id="p1-chosen-arrow" class="chosen-arrow">default</div>
+            Chosen arrow: <div id="p1-chosen-arrow" class="chosen-arrow">default</div>
         </div>
         <div id="game-status">BATTLE!</div>
         <div id="p2-hud" class="hud">
             <h2>Player 2 (Red)</h2>
-            <div id="p2-lives" class="lives">THIS SHOULD NOT BE SHOWN</div>
+            <div id="p2-lives" class="lives">❤❤❤❤❤</div>
             <div class="charge-bar-container"><div id="p2-charge" class="charge-bar"></div></div>
-            <div id="p2-chosen-arrow" class="chosen-arrow">default</div>
+            Chosen arrow: <div id="p2-chosen-arrow" class="chosen-arrow">default</div>
         </div>
     </div>
 
@@ -27,14 +29,12 @@
 
     <div id="controls-guide">
         <div><strong>Player 1:</strong> A/D = Move | W = Jump | S = Down | 1-2 = Chose Arrow | K = Sword | O = Hold/Release Bow</div>
-        <div><strong>Player 2:</strong> Arrow Keys = Move/Jump | [.] = Sword | [/] = Hold/Release Bow</div>
     </div>
     
     <div id="menu" class="hidden">
-        <div class="menu-content">
-            <h1>GAME OVER</h1>
-            <button id="restart-btn" onclick="resetGame()">Restart Battle</button>
-        </div>
+        <button id="btn-bot" onclick="startBotGame()">Play Vs Bot</button>
+        <button id="btn-multi" onclick="startMultiplayerGame()">Search Match</button>
+        <div class="info" id="multiplayer-status"></div>
     </div>
 
     <script src="script.js"></script>
