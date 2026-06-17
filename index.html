@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Bow & Sword Arena</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="ui-container">
+        <div id="p1-hud" class="hud">
+            <h2>Player 1 (Blue)</h2>
+            <div id="p1-lives" class="lives">❤❤</div>
+            <div class="charge-bar-container"><div id="p1-charge" class="charge-bar"></div></div>
+        </div>
+        <div id="game-status">BATTLE!</div>
+        <div id="p2-hud" class="hud">
+            <h2>Player 2 (Red)</h2>
+            <div id="p2-lives" class="lives">❤❤</div>
+            <div class="charge-bar-container"><div id="p2-charge" class="charge-bar"></div></div>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas" width="1024" height="576"></canvas>
+
+    <div id="controls-guide">
+        <div><strong>Player 1:</strong> A/D = Move | W = Jump | X = Sword | C = Hold/Release Bow</div>
+        <div><strong>Player 2:</strong> Arrow Keys = Move/Jump | [.] = Sword | [/] = Hold/Release Bow</div>
+    </div>
+    
+    <div id="menu" class="hidden">
+        <div class="menu-content">
+            <h1>GAME OVER</h1>
+            <button id="restart-btn" onclick="resetGame()">Restart Battle</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
