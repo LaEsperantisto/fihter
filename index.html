@@ -10,6 +10,7 @@
 
 </head>
 <body>
+    <div id="hacking"></div>
     <div id="ui-container">
         <div id="p1-hud" class="hud">
             <h2>Player 1 (Blue)</h2>
@@ -38,9 +39,10 @@
             <input type="number" id="lives-picker" value="5" min="1" max="10" style="width: 50px; padding: 5px; border-radius: 4px; border: none; text-align: center;">
         </div>
         
-        <button id="btn-auto-restart" onclick="autorestart()">Auto restart</button>
-        <button id="btn-bot" onclick="startBotGame()">Play Vs Bot</button>
-        <button id="btn-multi" onclick="startMultiplayerGame()">Search Match</button>
+        <button id="btn-auto-restart" onclick="autorestart()">Auto Restart</button>
+        <button id="btn-bot" onclick="startBotGame()">Play vs Bot</button>
+        <button id="btn-multi" onclick="startMultiplayerGame(false)">Search Match</button>
+        <button id="btn-multi" onclick="startMultiplayerGame(true)">Host Game</button>
         <button id="random-level" onclick="chooseRandomLevel()">New level</button>
         <div id="multiplayer-status"></div>
     </div>
