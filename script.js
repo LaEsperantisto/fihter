@@ -18,9 +18,9 @@ const platforms = [
     { x: 0, y: 536, width: 1024, height: 40, downable: false },
     { x: 150, y: 400, width: 250, height: 20, downable: true },
     { x: 624, y: 400, width: 250, height: 20, downable: true },
-    { x: 387, y: 260, width: 250, height: 20, downable: true },
-    { x: 50, y: 200, width: 150, height: 20, downable: true }, 
-    { x: 824, y: 200, width: 150, height: 20, downable: true },
+    { x: 387, y: 290, width: 250, height: 20, downable: true },
+    { x: 50, y: 250, width: 150, height: 20, downable: true }, 
+    { x: 824, y: 250, width: 150, height: 20, downable: true },
 ];
 
 // Projectiles array
@@ -39,52 +39,81 @@ class Arrow {
     }
 
     move(i) {
-        switch (this.type) {
-            case 'default':
-                this.vy += ARROW_GRAVITY;
-                this.x += this.vx;
-                this.y += this.vy;
+        this.vy += ARROW_GRAVITY;
+        this.x += this.vx;
+        this.y += this.vy;
 
-                this.draw();
+        this.draw();
 
-                // Platform collisions
-                let hitPlatform = false;
-                for (let plat of platforms) {
-                    if (this.x < plat.x + this.width && this.x + this.width > plat.x &&
-                        this.y < plat.y + plat.height && this.y + this.height > plat.y) {
-                        hitPlatform = true;
-                        break;
-                    }
+        // 1. Uniform Platform Collision Math
+        let hitPlatform = false;
+        for (let plat of platforms) {
+            if (this.x < plat.x + plat.width && this.x + this.width > plat.x &&
+                this.y < plat.y + plat.height && this.y + this.height > plat.y) {
+                hitPlatform = true;
+                break;
+            }
+        }
+
+        // 2. Uniform Target Collision Math
+        let hitTarget = false;
+        for (let target of characters) {
+            if (target.id !== this.ownerId && !target.isDead) {
+                if (this.x < target.x + target.width &&
+                    this.x + this.width > target.x &&
+                    this.y < target.y + target.height &&
+                    this.y + this.height > target.y) {
+                
+                    target.takeDamage();
+                    hitTarget = true;
+                    break;
                 }
+            }
+        }
 
-                // Dynamic target collisions against all other players
-                let hitTarget = false;
-                for (let target of characters) {
-                    if (target.id !== this.ownerId && !target.isDead) {
-                        if (this.x < target.x + target.width &&
-                            this.x + this.width > target.x &&
-                            this.y < target.y + target.height &&
-                            this.y + this.height > target.y) {
+        if (hitPlatform || hitTarget || this.x < 0 || this.x > canvas.width || this.y > canvas.height) {
+            if (this.type === 'teleport') {
+                const owner = characters.find(c => c.id === this.ownerId);
+                if (owner) {
+                    // Start by centering the player on the arrow's impact point
+                    let targetX = this.x - owner.width / 2;
+                    let targetY = this.y - owner.height / 2;
+
+                    // Bound checks: Don't teleport players out of the viewport boundaries
+                    if (targetX < 0) targetX = 0;
+                    if (targetX + owner.width > canvas.width) targetX = canvas.width - owner.width;
+                    if (targetY < 0) targetY = 0;
+
+                    // Platform Unclipping Phase: Check if the destination overlaps any platform
+                    for (let plat of platforms) {
+                        if (targetX < plat.x + plat.width &&
+                            targetX + owner.width > plat.x &&
+                            targetY < plat.y + plat.height &&
+                            targetY + owner.height > plat.y) {
                             
-                            target.takeDamage();
-                            hitTarget = true;
-                            break;
+                            // If colliding, prioritize pushing the character up onto the surface
+                            if (targetY + owner.height / 2 < plat.y + plat.height / 2) {
+                                targetY = plat.y - owner.height; 
+                            } else {
+                                // Otherwise, if it hits the bottom half of a platform, push them below it
+                                targetY = plat.y + plat.height;
+                            }
                         }
                     }
-                }
 
-                if (hitPlatform || hitTarget || this.x < 0 || this.x > canvas.width || this.y > canvas.height) {
-                    existingArrows.splice(i, 1);
+                    // Apply the safe, adjusted coordinates to the owner
+                    owner.x = targetX;
+                    owner.y = targetY;
+                    owner.vx = 0;
+                    owner.vy = 0;
                 }
-                break;
-            default:
-                console.error("Unknown arrow type " + this.type);
-                break;
+            }
+            existingArrows.splice(i, 1);
         }
     }
 
     draw() {
-        ctx.fillStyle = '#ecf0f1';
+        ctx.fillStyle = this.type === 'teleport' ? '#9b59b6' : '#ecf0f1'; // Teleport arrows get a cool purple color tint
         ctx.fillRect(this.x, this.y, this.width, this.height);
     }
 }
@@ -92,7 +121,7 @@ class Arrow {
 class Player {
     constructor(x, y, color, controls, id) {
         this.id = id;
-        this.startX = x; // Keep track of starting positions for easy respawns
+        this.startX = x; 
         this.startY = y;
         this.x = x;
         this.y = y;
@@ -116,6 +145,8 @@ class Player {
         this.isDead = false;
         this.respawnTimer = 0;
 
+        this.chosenArrow = 'default';
+
         this.isPressingDown = false;
     }
 
@@ -129,10 +160,9 @@ class Player {
         }
 
         this.vy += GRAVITY;
-
         this.isPressingDown = false;
-
         this.vx = 0;
+
         if (keys[this.controls.left]) {
             this.vx = -this.speed;
             this.direction = -1;
@@ -150,7 +180,6 @@ class Player {
         if (keys[this.controls.down]) {
             this.isPressingDown = true;
         }
-        
 
         if (keys[this.controls.sword] && !this.isAttackingSword && !this.isChargingBow) {
             this.isAttackingSword = true;
@@ -173,6 +202,12 @@ class Player {
             this.bowCharge = 0;
         }
 
+        if (keys['1']) {
+            this.chosenArrow = 'default';
+        } else if (keys['2']) {
+            this.chosenArrow = 'teleport';
+        }
+
         this.x += this.vx;
         this.y += this.vy;
 
@@ -182,13 +217,14 @@ class Player {
     shootArrow() {
         let power = (this.bowCharge / MAX_CHARGE) * 15 + 5; 
         existingArrows.push(new Arrow(
-            this.direction === 1 ? this.x + this.width : this.x - 10,
-            this.y + this.height / 2 - 3,
+            this.direction === 1 ? this.x + this.width : this.x - 15,
+            this.y + this.height / 2 - 2,
             this.direction * power,
             -power * 0.15,
             this.id,
             15,
             4,
+            this.chosenArrow,
         ));
     }
 
@@ -210,7 +246,6 @@ class Player {
                 this.vy = 0;
                 this.grounded = true;
             }
-        
         }
 
         if (this.y > canvas.height) {
@@ -227,8 +262,8 @@ class Player {
 
     respawn() {
         this.isDead = false;
-        this.x = this.startX;
-        this.y = 100;
+        this.x = Math.random() * (canvas.width - 100) + 50;
+        this.y = Math.random() * (canvas.height - 200) + 50;
         this.vx = 0;
         this.vy = 0;
     }
@@ -263,7 +298,7 @@ class Player {
 class Bot {
     constructor(x, y, color, id) {
         this.id = id;
-        this.startX = x; // Keep track of starting positions for easy respawns
+        this.startX = x; 
         this.startY = y;
         this.x = x;
         this.y = y;
@@ -288,19 +323,15 @@ class Bot {
         this.respawnTimer = 0;
 
         this.currentMoveDelay = 0;
-        
         this.moveDelay = 20;
         this.simulataneousMoves = 2;
         this.swordDelay = 5;
 
-        this.moves = new Array();
-
+        this.moves = [];
         for (let i = 0; i < this.simulataneousMoves; i++) {
             this.moves.push(0);
         }
-
         this.targetCharacter = undefined;
-
     }
 
     update(characters) {
@@ -311,63 +342,47 @@ class Bot {
             }
             return;
         }
-
-
         
         this.vy += GRAVITY;
-        
         this.vx = 0;
         
         if (this.currentMoveDelay > this.moveDelay) {
-
             this.currentMoveDelay = 0;
+            this.moves = [];
 
-            this.moves = new Array();
-
-            this.targetCharacter = characters.filter(c => {
-                    return this.id !== c.id;
-                })[Math.floor(Math.random() * (characters.length - 1))];
+            this.targetCharacter = characters.filter(c => this.id !== c.id)[Math.floor(Math.random() * (characters.length - 1))];
 
             while (this.moves.length <= this.simulataneousMoves){
-
                 const move = Math.floor(Math.random() * 6);
-
                 let alreadyUsedMove = false;
+                
                 this.moves.forEach(m => {
                     if (m === move) alreadyUsedMove = true;
                     else {
                         if (move === 1) {
                             if (this.targetCharacter && (this.targetCharacter.x > this.x)) {
                                 this.chosenDirection = 1
-                            }
-                            else {
+                            } else {
                                 this.chosenDirection = -1;
                             }
                         }
                     }
-                })
+                });
 
                 if (!alreadyUsedMove) this.moves.push(move);
             }
-
-            
-        }
-        
-        else {
+        } else {
             this.currentMoveDelay++;
         }
 
         for (let i = 0; i < this.simulataneousMoves; i++) {
-
             const move = this.moves[i];
-
             switch (move) {
                 case 0:
                     if (this.chosenDirection === 1) {
                         this.vx = this.speed;
                         this.direction = 1;
-                    }
-                    else {
+                    } else {
                         this.vx = -this.speed;
                         this.direction = -1;
                     }
@@ -393,28 +408,21 @@ class Bot {
                     this.isPressingDown = true;
                     break;
                 case 5:
-                    // DO NOTHING
                     break;
-                default:
-                    console.log("THIS SHOULD BE UNREACHABLE");
-                    console.log(move);
-                    console.log(i);
             }
-
             if (move !== 4) this.isPressingDown = false;
         }
             
-
         if (this.isAttackingSword) {
             if (this.currentSwordDelay < this.swordDelay) {
                 this.currentSwordDelay++;
-            }
-            else {
+            } else {
                 this.currentSwordDelay = 0;
                 this.swordTimer--;
                 if (this.swordTimer <= 0) this.isAttackingSword = false;
             }
         }
+
         if (this.isChargingBow) {
             if (this.bowCharge < MAX_CHARGE) {
                 this.bowCharge += CHARGE_SPEED;
@@ -434,13 +442,14 @@ class Bot {
     shootArrow() {
         let power = (this.bowCharge / MAX_CHARGE) * 15 + 5; 
         existingArrows.push(new Arrow(
-            this.direction === 1 ? this.x + this.width : this.x - 10,
-            this.y + this.height / 2 - 3,
+            this.direction === 1 ? this.x + this.width : this.x - 15,
+            this.y + this.height / 2 - 2,
             this.direction * power,
             -power * 0.15,
             this.id,
             15,
             4,
+            Math.random() >= 0.5 ? 'teleport' : 'default',
         ));
     }
 
@@ -463,7 +472,6 @@ class Bot {
                 this.vy = 0;
                 this.grounded = true;
             }
-        
         }
 
         if (this.y > canvas.height) {
@@ -480,8 +488,8 @@ class Bot {
 
     respawn() {
         this.isDead = false;
-        this.x = this.startX;
-        this.y = 100;
+        this.x = Math.random() * (canvas.width - 100) + 50;
+        this.y = Math.random() * (canvas.height - 200) + 50;
         this.vx = 0;
         this.vy = 0;
     }
@@ -513,14 +521,12 @@ class Bot {
     }
 }
 
-
 const characters = [
     new Player(100, 300, '#3498db', { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'x', bow: 'c' }, 1),
     new Bot(880, 300, '#e74c3c', 2),
 ];
 
 function updateUI() {
-    // Dynamic HUD update handles any number of configured elements in HTML safely
     characters.forEach(p => {
         const livesEl = document.getElementById(`p${p.id}-lives`);
         const chargeEl = document.getElementById(`p${p.id}-charge`);
@@ -529,7 +535,6 @@ function updateUI() {
         if (chargeEl) chargeEl.style.width = p.bowCharge + '%';
     });
 
-    // Determine how many players remain standing
     const activePlayers = characters.filter(p => p.lives > 0);
     if (activePlayers.length === 1) {
         document.getElementById('game-status').innerText = `PLAYER ${activePlayers[0].id} WINS!`;
@@ -545,7 +550,6 @@ function processArrows() {
 }
 
 function checkSwordCollisions() {
-    // Every player checks compatibility with every other player
     for (let attacker of characters) {
         if (!attacker.isAttackingSword || attacker.isDead) continue;
 
@@ -557,7 +561,7 @@ function checkSwordCollisions() {
             if (swordX < target.x + target.width && swordX + 20 > target.x &&
                 attacker.y + 15 < target.y + target.height && attacker.y + 25 > target.y) {
                 target.takeDamage();
-                attacker.isAttackingSword = false; // Break multi-hit frame
+                attacker.isAttackingSword = false; 
                 break; 
             }
         }
@@ -572,7 +576,6 @@ function gameLoop() {
     }
 
     if (running()) {
-        // Handle logic & layout processing globally for all active configurations
         characters.forEach(p => p.update(characters));
         characters.forEach(p => p.draw());
 
@@ -600,7 +603,6 @@ function gameLoop() {
 }
 
 function running() {
-    // The match continues until only 1 or 0 players remain alive
     const aliveCount = characters.filter(p => p.lives > 0).length;
     return aliveCount > 1;
 }
@@ -609,8 +611,8 @@ function resetGame() {
     characters.forEach(p => {
         p.lives = MAX_LIVES;
         p.isDead = false;
-        p.x = p.startX;
-        p.y = p.startY;
+        p.x = Math.random() * (canvas.width - 100) + 50;
+        p.y = Math.random() * (canvas.height - 200) + 50;
         p.vx = 0;
         p.vy = 0;
     });
