@@ -714,13 +714,23 @@ function startMultiplayerGame(hostFlag) {
     const statusEl = document.getElementById('multiplayer-status');
     if (statusEl) statusEl.innerText = "Connecting to matchmaking server...";
 
-    let roomName = "fighter-global-lobby-unique-123"; 
+    // Get the room input value from your HTML interface
+    const roomInput = document.getElementById('room-code-input');
+    let roomName = roomInput ? roomInput.value.trim() : "";
 
     if (isHost) {
+        // If host left room code empty, automatically generate a random short code
+        if (!roomName) {
+            roomName = "room-" + Math.floor(1000 + Math.random() * 9000);
+        }
+        
+        // Pass the custom room name directly to the Peer constructor
         peer = new Peer(roomName);
         
         peer.on('open', (id) => {
-            if (statusEl) statusEl.innerHTML = `Lobby created! Waiting for player...`;
+            if (statusEl) {
+                statusEl.innerHTML = `Lobby created!<br><strong>Share this code to invite a friend: ${id}</strong><br>Waiting for player...`;
+            }
         });
         
         peer.on('connection', (connection) => {
@@ -728,17 +738,31 @@ function startMultiplayerGame(hostFlag) {
             setupNetworkEvents();
         });
     } else {
-        peer = new Peer(); // Client gets a random ID
+        // Clients need an exact room name to join
+        if (!roomName) {
+            if (statusEl) statusEl.innerText = "Error: Please enter a Room Code to join.";
+            return;
+        }
+
+        peer = new Peer(); // Client gets a random session ID
         
         peer.on('open', (id) => {
-            if (statusEl) statusEl.innerText = "";
+            if (statusEl) statusEl.innerText = `Connecting to lobby: ${roomName}...`;
             conn = peer.connect(roomName);
             setupNetworkEvents();
         });
     }
 
     peer.on('error', (err) => {
-        if (statusEl) statusEl.innerText = "Connection error: " + err.type;
+        if (statusEl) {
+            if (err.type === 'unavailable-id') {
+                statusEl.innerText = "Lobby code is already taken! Try another code.";
+            } else if (err.type === 'peer-not-found') {
+                statusEl.innerText = "Room not found. Check the code and try again.";
+            } else {
+                statusEl.innerText = "Connection error: " + err.type;
+            }
+        }
         console.error(err);
     });
 }
@@ -760,7 +784,6 @@ function setupNetworkEvents() {
                 new Player(880, 300, '#e74c3c', {}, 2)
             ];
             
-            // Pick a level and send its index along with the match settings
             const chosenIndex = chooseRandomLevel(); 
             conn.send({ 
                 type: 'sync_match_settings', 
@@ -787,10 +810,9 @@ function setupNetworkEvents() {
         
         const remoteSlot = localPlayerSlot === 0 ? 1 : 0;
         
-        // Combined synchronization packet
         if (payload.type === 'sync_match_settings') {
             currentMatchMaxLives = payload.lives;
-            chooseRandomLevel(payload.levelIndex); // Client loads the exact same level
+            chooseRandomLevel(payload.levelIndex); 
             
             if (characters[0] && characters[1]) {
                 characters[0].lives = currentMatchMaxLives;
@@ -806,7 +828,7 @@ function setupNetworkEvents() {
                 characters[remoteSlot].isAttackingSword = payload.isAttackingSword;
                 characters[remoteSlot].isChargingBow = payload.isChargingBow;
                 characters[remoteSlot].bowCharge = payload.bowCharge;
-                characters[remoteSlot].isDead = payload.isDead; // Sync death status explicitly
+                characters[remoteSlot].isDead = payload.isDead; 
                 characters[remoteSlot].chosenArrow = payload.chosenArrow;
             }
         } 
