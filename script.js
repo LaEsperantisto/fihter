@@ -23,11 +23,6 @@ const platforms = [
     { x: 824, y: 250, width: 150, height: 20, downable: true },
 ];
 
-const characters = [
-    new Player(100, 300, '#3498db', { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o' }, 1),
-    new Bot(880, 300, '#e74c3c', 2),
-];
-
 // Projectiles array
 let existingArrows = [];
 
@@ -213,6 +208,9 @@ class Player {
             this.chosenArrow = 'teleport';
         }
 
+        const chosenArrowDiv = document.getElementById('p1-chosen-arrow');
+        chosenArrowDiv.innerHTML = this.chosenArrow;
+
         this.x += this.vx;
         this.y += this.vy;
 
@@ -337,6 +335,7 @@ class Bot {
             this.moves.push(0);
         }
         this.targetCharacter = undefined;
+        this.chosenArrow = 'default';
     }
 
     update(characters) {
@@ -370,6 +369,12 @@ class Bot {
                             } else {
                                 this.chosenDirection = -1;
                             }
+                        }
+
+                        if (move === 3) {
+                            this.chosenArrow = Math.random() >= 0.5 ? 'teleport' : 'default';
+                            const chosenArrowDiv = document.getElementById('p1-chosen-arrow')
+                            chosenArrowDiv.innerHTML = this.chosenArrow;
                         }
                     }
                 });
@@ -454,7 +459,7 @@ class Bot {
             this.id,
             15,
             4,
-            Math.random() >= 0.5 ? 'teleport' : 'default',
+            this.chosenArrow,
         ));
     }
 
@@ -621,6 +626,11 @@ function resetGame() {
     document.getElementById('game-status').innerText = "BATTLE!";
     updateUI();
 }
+
+const characters = [
+    new Player(100, 300, '#3498db', { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o' }, 1),
+    new Bot(880, 300, '#e74c3c', 2),
+];
 
 updateUI();
 gameLoop();
