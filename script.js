@@ -346,13 +346,13 @@ class Player {
             this.bowCharge = 0;
         }
 
-        if (keys['1']) {
+        if (keys[this.controls.default]) {
             this.chosenArrow = 'default';
-        } else if (keys['2']) {
+        } else if (keys[this.controls.teleport]) {
             this.chosenArrow = 'teleport';
         }
 
-        const chosenArrowDiv = document.getElementById('p1-chosen-arrow');
+        const chosenArrowDiv = document.getElementById('chosen-arrow');
         if (chosenArrowDiv && this.id === characters[localPlayerSlot].id) {
             chosenArrowDiv.innerHTML = this.chosenArrow;
         }
@@ -431,6 +431,7 @@ class Player {
     draw() {
         if (this.isDead) return;
 
+        // --- Draw Player Character ---
         ctx.fillStyle = this.color;
         ctx.fillRect(this.x, this.y, this.width, this.height);
 
@@ -451,6 +452,40 @@ class Player {
             let bowX = this.direction === 1 ? this.x + this.width + 5 : this.x - 5;
             ctx.arc(bowX, this.y + this.height/2, 12, -Math.PI/2, Math.PI/2, this.direction === -1);
             ctx.stroke();
+        }
+
+        // --- New: Floating Info Above Player ---
+        ctx.textAlign = 'center';
+        
+        // 1. Draw Lives/Health (e.g., ❤❤❤)
+        ctx.font = '12px Arial';
+        ctx.fillStyle = '#ff4757';
+        let livesText = '❤'.repeat(Math.max(0, this.lives));
+        // Placed 30 pixels above the player's head
+        ctx.fillText(livesText, this.x + this.width / 2, this.y - 30);
+
+        // 2. Draw Chosen Arrow Type
+        ctx.font = '10px Arial';
+        ctx.fillStyle = '#ffffff';
+        let arrowText = `Arrow: ${this.chosenArrow}`;
+        // Placed 18 pixels above the player's head
+        ctx.fillText(arrowText, this.x + this.width / 2, this.y - 18);
+
+        // 3. Draw Bow Charge Bar (Only shows when actively charging)
+        if (this.isChargingBow && this.bowCharge > 0) {
+            let barWidth = 30;
+            let barHeight = 4;
+            let barX = this.x + (this.width - barWidth) / 2;
+            let barY = this.y - 8; // Placed 8 pixels above the player's head
+
+            // Background of charge bar (Dark gray)
+            ctx.fillStyle = '#2c3e50';
+            ctx.fillRect(barX, barY, barWidth, barHeight);
+
+            // Foreground charge level (Orange)
+            ctx.fillStyle = '#e67e22';
+            let currentChargeWidth = (this.bowCharge / MAX_CHARGE) * barWidth;
+            ctx.fillRect(barX, barY, currentChargeWidth, barHeight);
         }
     }
 }
@@ -531,7 +566,7 @@ class Bot {
 
                         if (move === 3) {
                             this.chosenArrow = Math.random() >= 0.5 ? 'teleport' : 'default';
-                            const chosenArrowDiv = document.getElementById('p1-chosen-arrow')
+                            const chosenArrowDiv = document.getElementById('chosen-arrow')
                             if (chosenArrowDiv) chosenArrowDiv.innerHTML = this.chosenArrow;
                         }
                     }
@@ -661,8 +696,11 @@ class Bot {
 
     draw() {
         if (this.isDead) return;
+
+        // --- Draw Player Character ---
         ctx.fillStyle = this.color;
         ctx.fillRect(this.x, this.y, this.width, this.height);
+
         ctx.fillStyle = '#fff';
         let eyeX = this.direction === 1 ? this.x + this.width - 8 : this.x + 3;
         ctx.fillRect(eyeX, this.y + 8, 5, 5);
@@ -681,6 +719,40 @@ class Bot {
             ctx.arc(bowX, this.y + this.height/2, 12, -Math.PI/2, Math.PI/2, this.direction === -1);
             ctx.stroke();
         }
+
+        // --- New: Floating Info Above Player ---
+        ctx.textAlign = 'center';
+        
+        // 1. Draw Lives/Health (e.g., ❤❤❤)
+        ctx.font = '12px Arial';
+        ctx.fillStyle = '#ff4757';
+        let livesText = '❤'.repeat(Math.max(0, this.lives));
+        // Placed 30 pixels above the player's head
+        ctx.fillText(livesText, this.x + this.width / 2, this.y - 30);
+
+        // 2. Draw Chosen Arrow Type
+        ctx.font = '10px Arial';
+        ctx.fillStyle = '#ffffff';
+        let arrowText = `Arrow: ${this.chosenArrow}`;
+        // Placed 18 pixels above the player's head
+        ctx.fillText(arrowText, this.x + this.width / 2, this.y - 18);
+
+        // 3. Draw Bow Charge Bar (Only shows when actively charging)
+        if (this.isChargingBow && this.bowCharge > 0) {
+            let barWidth = 30;
+            let barHeight = 4;
+            let barX = this.x + (this.width - barWidth) / 2;
+            let barY = this.y - 8; // Placed 8 pixels above the player's head
+
+            // Background of charge bar (Dark gray)
+            ctx.fillStyle = '#2c3e50';
+            ctx.fillRect(barX, barY, barWidth, barHeight);
+
+            // Foreground charge level (Orange)
+            ctx.fillStyle = '#e67e22';
+            let currentChargeWidth = (this.bowCharge / MAX_CHARGE) * barWidth;
+            ctx.fillRect(barX, barY, currentChargeWidth, barHeight);
+        }
     }
 }
 
@@ -694,15 +766,42 @@ function startBotGame() {
     const livesInput = document.getElementById('lives-picker');
     currentMatchMaxLives = livesInput ? parseInt(livesInput.value, 10) : 5;
     
-    const sharedControls = { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o' };
+    const sharedControls = { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o', teleport: '2', default: '1'};
     characters = [
         new Player(100, 300, '#3498db', sharedControls, 1),
-        new Bot(880, 300, '#e74c3c', 2)
+        new Bot(880, 300, '#e74c3c', 2),
+        new Bot(580, 300, '#3ce745', 3),
+        new Bot(300, 300, '#dc3ce7', 4),
     ];
     
     // Override standard instance defaults with selected settings
-    characters[0].lives = currentMatchMaxLives;
-    characters[1].lives = currentMatchMaxLives;
+    
+    characters.forEach(c => {
+        c.lives = currentMatchMaxLives;
+    })
+    
+    updateUI();
+}
+
+function startLocalGame() {
+    gameMode = 'local';
+    gameStarted = true;
+    localPlayerSlot = 0;
+    
+    // Grab the custom starting lives right as the game triggers
+    const livesInput = document.getElementById('lives-picker');
+    currentMatchMaxLives = livesInput ? parseInt(livesInput.value, 10) : 5;
+    
+    characters = [
+        new Player(100, 300, '#3498db', { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'x', bow: 'c', teleport: '2', default: '1'}, 1),
+        new Player(200, 300, '#c5db34', { left: 'ArrowLeft', right: 'ArrowRight', jump: 'ArrowUp', down: 'ArrowDown', sword: '.', bow: '/', teleport: '\'', default: '#' }, 5),
+    ];
+    
+    // Override standard instance defaults with selected settings
+    
+    characters.forEach(c => {
+        c.lives = currentMatchMaxLives;
+    })
     
     updateUI();
 }
@@ -768,7 +867,7 @@ function startMultiplayerGame(hostFlag) {
 }
 
 function setupNetworkEvents() {
-    const sharedControls = { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o' };
+    const sharedControls = { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o', teleport: '2', default: '1' };
     
     conn.on('open', () => {
         const statusEl = document.getElementById('multiplayer-status');
@@ -851,13 +950,19 @@ function setupNetworkEvents() {
 }
 
 function updateUI() {
-    characters.forEach(p => {
-        const livesEl = document.getElementById(`p${p.id}-lives`);
-        const chargeEl = document.getElementById(`p${p.id}-charge`);
-        
-        if (livesEl) livesEl.innerText = '❤'.repeat(Math.max(0, p.lives)) || 'DEAD';
-        if (chargeEl) chargeEl.style.width = p.bowCharge + '%';
-    });
+    let p;
+
+    if (gameMode === 'bot' || gameMode === 'local') {
+        p = characters[0];
+    } else if (gameMode === 'multiplayer') {
+        p = characters[localPlayerSlot];
+    }
+    const livesEl = document.getElementById(`lives`);
+    const chargeEl = document.getElementById(`charge`);
+    
+    if (livesEl) livesEl.innerText = '❤'.repeat(Math.max(0, p.lives)) || 'DEAD';
+    if (chargeEl) chargeEl.style.width = p.bowCharge + '%';
+
 
     const activePlayers = characters.filter(p => p.lives > 0);
     if (gameStarted && activePlayers.length <= 1) {
@@ -910,8 +1015,8 @@ function gameLoop() {
         // Run full physics/controls updates for the locally controlled entity slot
         characters[localPlayerSlot].update();
 
-        if (gameMode === 'bot') {
-            characters[1].update(characters);
+        if (gameMode === 'bot' || gameMode === 'local') {
+            characters.slice(1).forEach(e => {e.update(characters); });
         } 
         else if (gameMode === 'multiplayer') {
             const remoteSlot = localPlayerSlot === 0 ? 1 : 0;
@@ -951,10 +1056,15 @@ function gameLoop() {
         checkSwordCollisions();
     }
 
+    else if (isAutorestart) {
+        resetGame();
+        gameStarted = true;
+    }
     else {
         const menu = document.getElementById("menu");
         if (menu && menu.classList.contains("hidden")) {
             menu.classList.remove("hidden");
+            chooseRandomLevel();
         }
     }
     
@@ -982,6 +1092,12 @@ function resetGame() {
 function autorestart() {
     isAutorestart = true;
 }
+
+window.addEventListener('contextmenu', (e) => {
+    if (e.target.classList.contains('ctrl-btn')) {
+        e.preventDefault();
+    }
+});
 
 if (HACKING) {
     const hackingDiv = document.getElementById('hacking');

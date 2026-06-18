@@ -147,3 +147,51 @@ button:hover {
 #menu.hidden {
     display: none;
 }
+
+#mobile-controls {
+    position: fixed;
+    bottom: 20px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 30px;
+    user-select: none;
+    -webkit-user-select: none; /* Prevents text selection highlighting while tapping fast */
+}
+
+.control-group {
+    display: flex;
+    gap: 12px;
+}
+
+.ctrl-btn {
+    width: 65px;
+    height: 65px;
+    background: rgba(255, 255, 255, 0.25);
+    border: 2px solid rgba(255, 255, 255, 0.6);
+    border-radius: 50%;
+    color: white;
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    touch-action: manipulation;
+}
+
+.ctrl-btn:active {
+    background: rgba(255, 255, 255, 0.6);
+    color: #2c3e50;
+}
+
+.actions {
+    position: relative;
+    bottom: 20px;
+}
+
+@media (pointer: fine) {
+    #mobile-controls {
+        display: none !important;
+    }
+}

@@ -12,25 +12,40 @@
 <body>
     <div id="hacking"></div>
     <div id="ui-container">
-        <div id="p1-hud" class="hud">
-            <h2>Player 1 (Blue)</h2>
-            <div id="p1-lives" class="lives">❤❤❤❤❤</div>
-            <div class="charge-bar-container"><div id="p1-charge" class="charge-bar"></div></div>
-            Chosen arrow: <div id="p1-chosen-arrow" class="chosen-arrow">default</div>
+        <div id="hud" class="hud">
+            <h2>You: </h2><h2 id="player-color"></h2>
+            <div id="lives" class="lives">❤❤❤❤❤</div>
+            <div class="charge-bar-container"><div id="charge" class="charge-bar"></div></div>
+            Chosen arrow: <div id="chosen-arrow" class="chosen-arrow">default</div>
         </div>
+
         <div id="game-status">BATTLE!</div>
-        <div id="p2-hud" class="hud">
-            <h2>Player 2 (Red)</h2>
-            <div id="p2-lives" class="lives">❤❤❤❤❤</div>
-            <div class="charge-bar-container"><div id="p2-charge" class="charge-bar"></div></div>
-            Chosen arrow: <div id="p2-chosen-arrow" class="chosen-arrow">default</div>
-        </div>
     </div>
 
     <canvas id="gameCanvas" width="1024" height="576"></canvas>
 
+    <div id="mobile-controls">
+        <div class="control-group dpad">
+            <button id="btn-left" class="ctrl-btn" 
+                    ontouchstart="keys['a'] = true" ontouchend="keys['a'] = false">◀</button>
+            <button id="btn-down" class="ctrl-btn" 
+                    ontouchstart="keys['s'] = true" ontouchend="keys['s'] = false">▼</button>
+            <button id="btn-right" class="ctrl-btn" 
+                    ontouchstart="keys['d'] = true" ontouchend="keys['d'] = false">▶</button>
+        </div>
+        
+        <div class="control-group actions">
+            <button id="btn-sword" class="ctrl-btn action-btn" 
+                    ontouchstart="keys['k'] = true" ontouchend="keys['k'] = false">⚔️</button>
+            <button id="btn-bow" class="ctrl-btn action-btn" 
+                    ontouchstart="keys['o'] = true" ontouchend="keys['o'] = false">🏹</button>
+            <button id="btn-jump" class="ctrl-btn action-btn" 
+                    ontouchstart="keys['w'] = true" ontouchend="keys['w'] = false">▲</button>
+        </div>
+    </div>
+    
     <div id="controls-guide">
-        <div><strong>Player 1:</strong> A/D = Move | W = Jump | S = Down | 1-2 = Chose Arrow | K = Sword | O = Hold/Release Bow</div>
+        <div><strong>Controls:</strong> A/D = Move | W = Jump | S = Down | 1-2 = Chose Arrow | K = Sword | O = Hold/Release Bow</div>
     </div>
     
     <div id="menu">
@@ -41,9 +56,10 @@
         
         <input type="text" id="room-code-input" placeholder="Enter Room Code (e.g. room-101)">
         <button id="btn-auto-restart" onclick="autorestart()">Auto Restart</button>
-        <button id="btn-bot" onclick="startBotGame()">Play vs Bot</button>
-        <button id="btn-multi" onclick="startMultiplayerGame(false)">Search Match</button>
-        <button id="btn-multi" onclick="startMultiplayerGame(true)">Host Game</button>
+        <button id="btn-bot" onclick="startBotGame()">Play vs Bots</button>
+        <button id="btn-local" onclick="startLocalGame()">Play Locally</button>
+        <button id="btn-search" onclick="startMultiplayerGame(false)">Search Match</button>
+        <button id="btn-host" onclick="startMultiplayerGame(true)">Host Game</button>
         <button id="random-level" onclick="chooseRandomLevel()">New level</button>
         <div id="multiplayer-status"></div>
     </div>
