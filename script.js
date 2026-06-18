@@ -13,7 +13,7 @@ let currentMatchMaxLives = 5;
 
 // Game State Engine Variables
 let gameStarted = false;
-let gameMode = 'menu'; // 'menu', 'bot', 'multiplayer'
+let gameMode = 'menu'; // 'menu', 'local', 'bot', 'multiplayer'
 let characters = [];
 let localPlayerSlot = 0; // Index of the local browser entity in characters array
 let isAutorestart = false;
@@ -222,6 +222,10 @@ class Arrow {
                         target.takeDamage();
                     }
                     hitTarget = true;
+                    
+                    const owner = characters.find(c => c.id === this.ownerId);
+                    owner.kills++;
+
                     break;
                 }
             }
@@ -253,6 +257,7 @@ class Arrow {
                     owner.vy = 0;
                 }
             }
+
             existingArrows.splice(i, 1);
         }
     }
@@ -274,6 +279,7 @@ class Player {
         this.height = 50;
         this.color = color;
         this.controls = controls;
+        this.kills = 0;
         
         this.vx = 0;
         this.vy = 0;
@@ -432,6 +438,10 @@ class Player {
         if (this.isDead) return;
 
         // --- Draw Player Character ---
+        if (gameMode === 'bot') {
+            ctx.fillStyle = '#fffb00';
+            ctx.fillRect(this.x - 2, this.y - 2, this.width + 4, this.height + 4);
+        }
         ctx.fillStyle = this.color;
         ctx.fillRect(this.x, this.y, this.width, this.height);
 
@@ -454,35 +464,34 @@ class Player {
             ctx.stroke();
         }
 
-        // --- New: Floating Info Above Player ---
         ctx.textAlign = 'center';
         
-        // 1. Draw Lives/Health (e.g., ❤❤❤)
         ctx.font = '12px Arial';
         ctx.fillStyle = '#ff4757';
         let livesText = '❤'.repeat(Math.max(0, this.lives));
-        // Placed 30 pixels above the player's head
+        
         ctx.fillText(livesText, this.x + this.width / 2, this.y - 30);
 
-        // 2. Draw Chosen Arrow Type
+        ctx.font = '15px Arial';
+        ctx.fillStyle = '#ff0015';
+        let killsText = "Kills: " + this.kills;
+        ctx.fillText(killsText, this.x + this.width / 2, this.y - 50);
+
         ctx.font = '10px Arial';
         ctx.fillStyle = '#ffffff';
         let arrowText = `Arrow: ${this.chosenArrow}`;
-        // Placed 18 pixels above the player's head
+        
         ctx.fillText(arrowText, this.x + this.width / 2, this.y - 18);
 
-        // 3. Draw Bow Charge Bar (Only shows when actively charging)
         if (this.isChargingBow && this.bowCharge > 0) {
             let barWidth = 30;
             let barHeight = 4;
             let barX = this.x + (this.width - barWidth) / 2;
             let barY = this.y - 8; // Placed 8 pixels above the player's head
 
-            // Background of charge bar (Dark gray)
             ctx.fillStyle = '#2c3e50';
             ctx.fillRect(barX, barY, barWidth, barHeight);
 
-            // Foreground charge level (Orange)
             ctx.fillStyle = '#e67e22';
             let currentChargeWidth = (this.bowCharge / MAX_CHARGE) * barWidth;
             ctx.fillRect(barX, barY, currentChargeWidth, barHeight);
@@ -501,6 +510,7 @@ class Bot {
         this.width = 30;
         this.height = 50;
         this.color = color;
+        this.kills = 0;
         
         this.vx = 0;
         this.vy = 0;
@@ -737,6 +747,12 @@ class Bot {
         // Placed 18 pixels above the player's head
         ctx.fillText(arrowText, this.x + this.width / 2, this.y - 18);
 
+        ctx.font = '15px Arial';
+        ctx.fillStyle = '#ff0015';
+        let killsText = "Kills: " + this.kills;
+        ctx.fillText(killsText, this.x + this.width / 2, this.y - 50);
+
+        
         // 3. Draw Bow Charge Bar (Only shows when actively charging)
         if (this.isChargingBow && this.bowCharge > 0) {
             let barWidth = 30;
