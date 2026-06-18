@@ -4,7 +4,7 @@ const ctx = canvas.getContext('2d');
 // Global Constants
 const GRAVITY = 0.5;
 const ARROW_GRAVITY = 0.15;
-const MAX_CHARGE = 100;
+const MAX_CHARGE = 150;
 const CHARGE_SPEED = 2;
 const HACKING = false;
 const arrowTypes = ['default', 'teleport', 'explode', 'build'];
@@ -272,7 +272,8 @@ class Arrow {
                     height: 60,
                     downable: false,
                     kill: true,
-                    removeDelay: 100
+                    removeDelay: 200,
+                    owner: characters.find(c => c.id === this.ownerId),
                 };
 
                 level.push(new_platform);
@@ -362,6 +363,7 @@ class Character {
                            this.y + this.height > plat.y;
             
             if (isInside) {
+                plat.owner.kills++;
                 this.takeDamage();
                 return; 
             }
@@ -510,15 +512,24 @@ class Player extends Character {
             this.isPressingDown = true;
         }
 
-        if (keys[this.controls.sword] && !this.isAttackingSword && !this.isChargingBow) {
+        // --- UPDATED SWORD ATTACK LOGIC ---
+        // Player can only swing if they aren't already swinging/cooling down (swordTimer <= 0)
+        if (keys[this.controls.sword] && this.swordTimer <= 0 && !this.isChargingBow) {
             this.isAttackingSword = true;
-            this.swordTimer = 15;
+            this.swordTimer = 72; // 0.5s active (30 frames) + 0.7s cooldown (42 frames) = 72 frames total
         }
 
-        if (this.isAttackingSword) {
+        // Manage sword timer tracking
+        if (this.swordTimer > 0) {
             this.swordTimer--;
-            if (this.swordTimer <= 0) this.isAttackingSword = false;
+            
+            // Turn off the hitbox/visuals after 0.5 seconds (30 frames)
+            // The remaining 42 frames serve as the active cooldown period
+            if (this.swordTimer <= 42) {
+                this.isAttackingSword = false;
+            }
         }
+        // ----------------------------------
 
         if (keys[this.controls.bow] && !this.isAttackingSword) {
             this.isChargingBow = true;
@@ -528,7 +539,7 @@ class Player extends Character {
         } else if (this.isChargingBow) {
             this.shootArrow();
             this.isChargingBow = false;
-            this.bowCharge = -10;
+            this.bowCharge = -30;
         }
 
         if (keys[this.controls.default]) {
@@ -933,22 +944,15 @@ function gameLoop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     // Draw the synchronized map layout
-    let plats_to_remove = [];
     for (let plat of level) {
         ctx.fillStyle = plat.downable ? '#ffb9b9' : plat.kill ? '#ff8746' : '#7f8c8d';
         ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
 
         if (plat.removeDelay !== undefined) {
             plat.removeDelay--;
-            if (plat.removeDelay === 0) {
-                plats_to_remove.push(level.indexOf(plat));
-            }
         }
     }
-
-    plats_to_remove.forEach(i => {
-        level.splice(i);
-    });
+    level = level.filter(plat => plat.removeDelay === undefined || plat.removeDelay > 0);
 
     if (running()) {
         // Run full physics/controls updates for the locally controlled entity slot
