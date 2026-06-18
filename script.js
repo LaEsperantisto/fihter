@@ -7,7 +7,7 @@ const ARROW_GRAVITY = 0.15;
 const MAX_CHARGE = 100;
 const CHARGE_SPEED = 2;
 const HACKING = false;
-const arrowTypes = ['default', 'teleport', 'explode'];
+const arrowTypes = ['default', 'teleport', 'explode', 'build'];
 
 let currentMatchMaxLives = 5;
 
@@ -175,6 +175,7 @@ let level;
 function chooseRandomLevel(forcedIndex = null) {
     let index = forcedIndex !== null ? forcedIndex : Math.floor(Math.random() * levels.length);
     level = levels[index];
+
     return index;
 }
 
@@ -212,24 +213,26 @@ class Arrow {
 
         let hitTarget = false;
         for (let target of characters) {
-            if (!target.isDead) {
-                if (this.x < target.x + target.width &&
-                    this.x + this.width > target.x &&
-                    this.y < target.y + target.height &&
-                    this.y + this.height > target.y) {
+            if (!this.type === 'build') {
+                if (!target.isDead) {
+                    if (this.x < target.x + target.width &&
+                        this.x + this.width > target.x &&
+                        this.y < target.y + target.height &&
+                        this.y + this.height > target.y) {
                 
-                    // In multiplayer mode, only the host registers target damage to maintain consistency
-                    if (gameMode !== 'multiplayer' || isHost) {
-                        target.takeDamage();
-                    }
-                    hitTarget = true;
+                        // In multiplayer mode, only the host registers target damage to maintain consistency
+                        if (gameMode !== 'multiplayer' || isHost) {
+                            target.takeDamage();
+                        }
+                        hitTarget = true;
                     
-                    const owner = characters.find(c => c.id === this.ownerId);
-                    owner.kills++;
+                        const owner = characters.find(c => c.id === this.ownerId);
+                        owner.kills++;
 
-                    updateUI();
+                        updateUI();
 
-                    break;
+                        break;
+                    }
                 }
             }
         }
@@ -270,6 +273,19 @@ class Arrow {
                     downable: false,
                     kill: true,
                     removeDelay: 100
+                };
+
+                level.push(new_platform);
+            }
+
+            else if (this.type === 'build') {
+                let new_platform = {
+                    x: this.x - 40,
+                    y: this.y - 55,
+                    width: 80,
+                    height: 60,
+                    downable: true,
+                    removeDelay: 150
                 };
 
                 level.push(new_platform);
@@ -512,7 +528,7 @@ class Player extends Character {
         } else if (this.isChargingBow) {
             this.shootArrow();
             this.isChargingBow = false;
-            this.bowCharge = 0;
+            this.bowCharge = -10;
         }
 
         if (keys[this.controls.default]) {
@@ -521,6 +537,8 @@ class Player extends Character {
             this.chosenArrow = 'teleport';
         } else if (keys[this.controls.explode]) {
             this.chosenArrow = 'explode';
+        } else if (keys[this.controls.build]) {
+            this.chosenArrow = 'build';
         }
 
         const chosenArrowDiv = document.getElementById('chosen-arrow');
@@ -671,7 +689,7 @@ function startBotGame() {
     const livesInput = document.getElementById('lives-picker');
     currentMatchMaxLives = livesInput ? parseInt(livesInput.value, 10) : 5;
     
-    const sharedControls = { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o', teleport: '2', default: '1', explode: '3'};
+    const sharedControls = { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o', teleport: '2', default: '1', explode: '3', build: '4'};
     characters = [
         new Player(100, 300, '#3498db', sharedControls, 1),
         new Bot(880, 300, '#e74c3c', 2),
@@ -698,8 +716,8 @@ function startLocalGame() {
     currentMatchMaxLives = livesInput ? parseInt(livesInput.value, 10) : 5;
     
     characters = [
-        new Player(100, 300, '#3498db', { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'x', bow: 'c', teleport: '2', default: '1', explode: '3'}, 1),
-        new Player(800, 300, '#c5db34', { left: 'ArrowLeft', right: 'ArrowRight', jump: 'ArrowUp', down: 'ArrowDown', sword: '.', bow: '/', teleport: '\'', default: '#', explode: ';'}, 2),
+        new Player(100, 300, '#3498db', { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'x', bow: 'c', teleport: '2', default: '1', explode: '3', build: '4'}, 1),
+        new Player(800, 300, '#c5db34', { left: 'ArrowLeft', right: 'ArrowRight', jump: 'ArrowUp', down: 'ArrowDown', sword: '.', bow: '/', teleport: '\'', default: '#', explode: ';', build: 'l'}, 2),
     ];
     
     // Override standard instance defaults with selected settings
