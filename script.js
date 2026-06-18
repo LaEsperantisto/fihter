@@ -226,6 +226,8 @@ class Arrow {
                     const owner = characters.find(c => c.id === this.ownerId);
                     owner.kills++;
 
+                    updateUI();
+
                     break;
                 }
             }
@@ -752,7 +754,7 @@ class Bot {
         let killsText = "Kills: " + this.kills;
         ctx.fillText(killsText, this.x + this.width / 2, this.y - 50);
 
-        
+
         // 3. Draw Bow Charge Bar (Only shows when actively charging)
         if (this.isChargingBow && this.bowCharge > 0) {
             let barWidth = 30;
@@ -945,6 +947,7 @@ function setupNetworkEvents() {
                 characters[remoteSlot].bowCharge = payload.bowCharge;
                 characters[remoteSlot].isDead = payload.isDead; 
                 characters[remoteSlot].chosenArrow = payload.chosenArrow;
+                characters[remoteSlot].kills = payload.kills;
             }
         } 
         else if (payload.type === 'projectile') {
@@ -975,9 +978,11 @@ function updateUI() {
     }
     const livesEl = document.getElementById(`lives`);
     const chargeEl = document.getElementById(`charge`);
+    const killEl = document.getElementById(`kill-counter`);
     
     if (livesEl) livesEl.innerText = '❤'.repeat(Math.max(0, p.lives)) || 'DEAD';
     if (chargeEl) chargeEl.style.width = p.bowCharge + '%';
+    if (killEl) killEl.innerText = "Kills: " + p.kills;
 
 
     const activePlayers = characters.filter(p => p.lives > 0);
@@ -1010,6 +1015,7 @@ function checkSwordCollisions() {
                 
                 if (gameMode !== 'multiplayer' || isHost) {
                     target.takeDamage();
+                    attacker.kills++;
                 }
                 attacker.isAttackingSword = false; 
                 break; 
@@ -1055,6 +1061,7 @@ function gameLoop() {
                     isChargingBow: myState.isChargingBow,
                     bowCharge: myState.bowCharge,
                     isDead: myState.isDead,
+                    kills: myState.kills,
                     chosenArrow: HACKING ? 'default' : myState.chosenArrow,
                 });
             }
