@@ -578,8 +578,6 @@ class Bot {
 
                         if (move === 3) {
                             this.chosenArrow = Math.random() >= 0.5 ? 'teleport' : 'default';
-                            const chosenArrowDiv = document.getElementById('chosen-arrow')
-                            if (chosenArrowDiv) chosenArrowDiv.innerHTML = this.chosenArrow;
                         }
                     }
                 });
