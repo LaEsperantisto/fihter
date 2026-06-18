@@ -7,7 +7,7 @@ const ARROW_GRAVITY = 0.15;
 const MAX_CHARGE = 100;
 const CHARGE_SPEED = 2;
 const HACKING = false;
-
+const arrowTypes = ['default', 'teleport', 'explode'];
 
 let currentMatchMaxLives = 5;
 
@@ -17,6 +17,7 @@ let gameMode = 'menu'; // 'menu', 'local', 'bot', 'multiplayer'
 let characters = [];
 let localPlayerSlot = 0; // Index of the local browser entity in characters array
 let isAutorestart = false;
+let killDelay = 10;
 
 // PeerJS Networking Variables
 let peer = null;
@@ -260,18 +261,32 @@ class Arrow {
                 }
             }
 
+            else if (this.type === 'explode') {
+                let new_platform = {
+                    x: this.x - 30,
+                    y: this.y - 30,
+                    width: 60,
+                    height: 60,
+                    downable: false,
+                    kill: true,
+                    removeDelay: 100
+                };
+
+                level.push(new_platform);
+            }
+
             existingArrows.splice(i, 1);
         }
     }
 
     draw() {
-        ctx.fillStyle = this.type === 'teleport' ? '#9b59b6' : '#ecf0f1';
+        ctx.fillStyle = this.type === 'teleport' ? '#9b59b6' : this.type === 'explode' ? '#ffb039' : '#ecf0f1';
         ctx.fillRect(this.x, this.y, this.width, this.height);
     }
 }
 
-class Player {
-    constructor(x, y, color, controls, id) {
+class Character {
+    constructor(x, y, color, id) {
         this.id = id;
         this.startX = x; 
         this.startY = y;
@@ -280,7 +295,6 @@ class Player {
         this.width = 30;
         this.height = 50;
         this.color = color;
-        this.controls = controls;
         this.kills = 0;
         
         this.vx = 0;
@@ -292,11 +306,158 @@ class Player {
 
         this.lives = currentMatchMaxLives;
         this.isAttackingSword = false;
+        this.currentSwordDelay = 0;
         this.swordTimer = 0;
         this.isChargingBow = false;
         this.bowCharge = 0;
         this.isDead = false;
         this.respawnTimer = 0;
+    } 
+
+    shootArrow() {
+        let power = (this.bowCharge / MAX_CHARGE) * 15 + 5; 
+        existingArrows.push(new Arrow(
+            this.direction === 1 ? this.x + this.width : this.x - 15,
+            this.y + this.height / 2 - 2,
+            this.direction * power,
+            -power * 0.15,
+            this.id,
+            15,
+            4,
+            this.chosenArrow,
+        ));
+
+        if (gameMode === 'multiplayer' && conn && conn.open) {
+            conn.send({ type: 'projectile', data: arrowData });
+        }
+    }
+
+    handleCollisions() {
+    this.grounded = false;
+
+    if (this.x < 0) this.x = 0;
+    if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+
+    for (let plat of level) {
+        if (plat.kill) {
+            let isInside = this.x < plat.x + plat.width &&
+                           this.x + this.width > plat.x &&
+                           this.y < plat.y + plat.height &&
+                           this.y + this.height > plat.y;
+            
+            if (isInside) {
+                this.takeDamage();
+                return; 
+            }
+        }
+
+        if (plat.downable && this.isPressingDown) continue;
+        if (this.x <= plat.x + plat.width &&
+            this.x + this.width >= plat.x &&
+            this.y + this.height >= plat.y &&
+            this.y + this.height - this.vy <= plat.y + 10 &&
+            this.vy >= 0) {
+        
+            this.y = plat.y - this.height;
+            this.vy = 0;
+            this.grounded = true;
+        }
+    }
+
+    if (this.y > canvas.height) {
+        this.takeDamage();
+    }
+}
+
+    takeDamage() {
+        this.lives--;
+        this.isDead = true;
+        this.respawnTimer = 90;
+        updateUI();
+
+        if (gameMode === 'multiplayer' && conn && conn.open) {
+            conn.send({ type: 'life_update', id: this.id, lives: this.lives });
+        }
+    }
+
+    respawn() {
+        this.isDead = false;
+        this.x = Math.random() * (canvas.width - 100) + 50;
+        this.y = Math.random() * (canvas.height - 200) + 50;
+        this.vx = 0;
+        this.vy = 0;
+    }
+
+    draw() {
+        if (this.isDead) return;
+
+        // --- Draw Player Character ---
+        if (gameMode === 'bot' && characters[localPlayerSlot] === this) {
+            ctx.fillStyle = '#fffb00';
+            ctx.fillRect(this.x - 2, this.y - 2, this.width + 4, this.height + 4);
+        }
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+
+        ctx.fillStyle = '#fff';
+        let eyeX = this.direction === 1 ? this.x + this.width - 8 : this.x + 3;
+        ctx.fillRect(eyeX, this.y + 8, 5, 5);
+
+        if (this.isAttackingSword) {
+            ctx.fillStyle = '#f1c40f';
+            let swordX = this.direction === 1 ? this.x + this.width : this.x - 20;
+            ctx.fillRect(swordX, this.y + 15, 20, 10);
+        }
+
+        if (this.isChargingBow) {
+            ctx.strokeStyle = '#e67e22';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            let bowX = this.direction === 1 ? this.x + this.width + 5 : this.x - 5;
+            ctx.arc(bowX, this.y + this.height/2, 12, -Math.PI/2, Math.PI/2, this.direction === -1);
+            ctx.stroke();
+        }
+
+        ctx.textAlign = 'center';
+        
+        ctx.font = '12px Arial';
+        ctx.fillStyle = '#ff4757';
+        let livesText = '❤'.repeat(Math.max(0, this.lives));
+        
+        ctx.fillText(livesText, this.x + this.width / 2, this.y - 30);
+
+        ctx.font = '15px Arial';
+        ctx.fillStyle = '#ff0015';
+        let killsText = "Kills: " + this.kills;
+        ctx.fillText(killsText, this.x + this.width / 2, this.y - 50);
+
+        ctx.font = '10px Arial';
+        ctx.fillStyle = '#ffffff';
+        let arrowText = `Arrow: ${this.chosenArrow}`;
+        
+        ctx.fillText(arrowText, this.x + this.width / 2, this.y - 18);
+
+        if (this.isChargingBow && this.bowCharge > 0) {
+            let barWidth = 30;
+            let barHeight = 4;
+            let barX = this.x + (this.width - barWidth) / 2;
+            let barY = this.y - 8; // Placed 8 pixels above the player's head
+
+            ctx.fillStyle = '#2c3e50';
+            ctx.fillRect(barX, barY, barWidth, barHeight);
+
+            ctx.fillStyle = '#e67e22';
+            let currentChargeWidth = (this.bowCharge / MAX_CHARGE) * barWidth;
+            ctx.fillRect(barX, barY, currentChargeWidth, barHeight);
+        }
+    }
+}
+
+class Player extends Character {
+    constructor(x, y, color, controls, id) {
+        super(x, y, color, id);
+
+        this.controls = controls;
 
         this.chosenArrow = 'default';
         this.isPressingDown = false;
@@ -358,6 +519,8 @@ class Player {
             this.chosenArrow = 'default';
         } else if (keys[this.controls.teleport]) {
             this.chosenArrow = 'teleport';
+        } else if (keys[this.controls.explode]) {
+            this.chosenArrow = 'explode';
         }
 
         const chosenArrowDiv = document.getElementById('chosen-arrow');
@@ -370,165 +533,12 @@ class Player {
 
         this.handleCollisions();
     }
-
-    shootArrow() {
-        let power = (this.bowCharge / MAX_CHARGE) * 15 + 5;
-        let arrowData = {
-            x: this.direction === 1 ? this.x + this.width : this.x - 15,
-            y: this.y + this.height / 2 - 2,
-            vx: this.direction * power,
-            vy: -power * 0.15,
-            ownerId: this.id,
-            width: 15,
-            height: 4,
-            type: this.chosenArrow
-        };
-
-        existingArrows.push(new Arrow(arrowData.x, arrowData.y, arrowData.vx, arrowData.vy, arrowData.ownerId, arrowData.width, arrowData.height, arrowData.type));
-
-        // Sync projectile to peer
-        if (gameMode === 'multiplayer' && conn && conn.open) {
-            conn.send({ type: 'projectile', data: arrowData });
-        }
-    }
-
-    handleCollisions() {
-        this.grounded = false;
-
-        if (this.x < 0) this.x = 0;
-        if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
-
-        for (let plat of level) {
-            if (plat.downable && this.isPressingDown) continue;
-            if (this.x <= plat.x + plat.width &&
-                this.x + this.width >= plat.x &&
-                this.y + this.height >= plat.y &&
-                this.y + this.height - this.vy <= plat.y + 10 &&
-                this.vy >= 0) {
-            
-                this.y = plat.y - this.height;
-                this.vy = 0;
-                this.grounded = true;
-            }
-        }
-
-        if (this.y > canvas.height) {
-            this.takeDamage();
-        }
-    }
-
-    takeDamage() {
-        this.lives--;
-        this.isDead = true;
-        this.respawnTimer = 90;
-        updateUI();
-
-        if (gameMode === 'multiplayer' && conn && conn.open) {
-            conn.send({ type: 'life_update', id: this.id, lives: this.lives });
-        }
-    }
-
-    respawn() {
-        this.isDead = false;
-        this.x = Math.random() * (canvas.width - 100) + 50;
-        this.y = Math.random() * (canvas.height - 200) + 50;
-        this.vx = 0;
-        this.vy = 0;
-    }
-
-    draw() {
-        if (this.isDead) return;
-
-        // --- Draw Player Character ---
-        if (gameMode === 'bot') {
-            ctx.fillStyle = '#fffb00';
-            ctx.fillRect(this.x - 2, this.y - 2, this.width + 4, this.height + 4);
-        }
-        ctx.fillStyle = this.color;
-        ctx.fillRect(this.x, this.y, this.width, this.height);
-
-        ctx.fillStyle = '#fff';
-        let eyeX = this.direction === 1 ? this.x + this.width - 8 : this.x + 3;
-        ctx.fillRect(eyeX, this.y + 8, 5, 5);
-
-        if (this.isAttackingSword) {
-            ctx.fillStyle = '#f1c40f';
-            let swordX = this.direction === 1 ? this.x + this.width : this.x - 20;
-            ctx.fillRect(swordX, this.y + 15, 20, 10);
-        }
-
-        if (this.isChargingBow) {
-            ctx.strokeStyle = '#e67e22';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            let bowX = this.direction === 1 ? this.x + this.width + 5 : this.x - 5;
-            ctx.arc(bowX, this.y + this.height/2, 12, -Math.PI/2, Math.PI/2, this.direction === -1);
-            ctx.stroke();
-        }
-
-        ctx.textAlign = 'center';
-        
-        ctx.font = '12px Arial';
-        ctx.fillStyle = '#ff4757';
-        let livesText = '❤'.repeat(Math.max(0, this.lives));
-        
-        ctx.fillText(livesText, this.x + this.width / 2, this.y - 30);
-
-        ctx.font = '15px Arial';
-        ctx.fillStyle = '#ff0015';
-        let killsText = "Kills: " + this.kills;
-        ctx.fillText(killsText, this.x + this.width / 2, this.y - 50);
-
-        ctx.font = '10px Arial';
-        ctx.fillStyle = '#ffffff';
-        let arrowText = `Arrow: ${this.chosenArrow}`;
-        
-        ctx.fillText(arrowText, this.x + this.width / 2, this.y - 18);
-
-        if (this.isChargingBow && this.bowCharge > 0) {
-            let barWidth = 30;
-            let barHeight = 4;
-            let barX = this.x + (this.width - barWidth) / 2;
-            let barY = this.y - 8; // Placed 8 pixels above the player's head
-
-            ctx.fillStyle = '#2c3e50';
-            ctx.fillRect(barX, barY, barWidth, barHeight);
-
-            ctx.fillStyle = '#e67e22';
-            let currentChargeWidth = (this.bowCharge / MAX_CHARGE) * barWidth;
-            ctx.fillRect(barX, barY, currentChargeWidth, barHeight);
-        }
-    }
 }
 
 // Keep your original Bot logic perfectly intact
-class Bot {
+class Bot extends Character  {
     constructor(x, y, color, id) {
-        this.id = id;
-        this.startX = x; 
-        this.startY = y;
-        this.x = x;
-        this.y = y;
-        this.width = 30;
-        this.height = 50;
-        this.color = color;
-        this.kills = 0;
-        
-        this.vx = 0;
-        this.vy = 0;
-        this.speed = 5;
-        this.jumpForce = 12;
-        this.grounded = false;
-        this.direction = x < canvas.width / 2 ? 1 : -1;
-
-        this.lives = currentMatchMaxLives;
-        this.isAttackingSword = false;
-        this.currentSwordDelay = 0;
-        this.swordTimer = 0;
-        this.isChargingBow = false;
-        this.bowCharge = 0;
-        this.isDead = false;
-        this.respawnTimer = 0;
+        super(x, y, color, id);
 
         this.currentMoveDelay = 0;
         this.moveDelay = 20;
@@ -577,7 +587,7 @@ class Bot {
                         }
 
                         if (move === 3) {
-                            this.chosenArrow = Math.random() >= 0.5 ? 'teleport' : 'default';
+                            this.chosenArrow = arrowTypes[Math.floor(Math.random() * arrowTypes.length)];
                         }
                     }
                 });
@@ -649,127 +659,6 @@ class Bot {
 
         this.handleCollisions();
     }
-
-    shootArrow() {
-        let power = (this.bowCharge / MAX_CHARGE) * 15 + 5; 
-        existingArrows.push(new Arrow(
-            this.direction === 1 ? this.x + this.width : this.x - 15,
-            this.y + this.height / 2 - 2,
-            this.direction * power,
-            -power * 0.15,
-            this.id,
-            15,
-            4,
-            this.chosenArrow,
-        ));
-    }
-
-    handleCollisions() {
-        this.grounded = false;
-
-        if (this.x < 0) this.x = 0;
-        if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
-
-        for (let plat of level) {
-            if (plat.downable && this.isPressingDown) continue;
-            if (this.x < plat.x + plat.width &&
-                this.x + this.width > plat.x &&
-                this.y + this.height >= plat.y &&
-                this.y + this.height - this.vy <= plat.y + 10 &&
-                this.vy >= 0) {
-            
-                this.y = plat.y - this.height;
-                this.vy = 0;
-                this.grounded = true;
-            }
-        }
-
-        if (this.y > canvas.height) {
-            this.takeDamage();
-        }
-    }
-
-    takeDamage() {
-        this.lives--;
-        this.isDead = true;
-        this.respawnTimer = 90;
-        updateUI();
-    }
-
-    respawn() {
-        this.isDead = false;
-        this.x = Math.random() * (canvas.width - 100) + 50;
-        this.y = Math.random() * (canvas.height - 200) + 50;
-        this.vx = 0;
-        this.vy = 0;
-    }
-
-    draw() {
-        if (this.isDead) return;
-
-        // --- Draw Player Character ---
-        ctx.fillStyle = this.color;
-        ctx.fillRect(this.x, this.y, this.width, this.height);
-
-        ctx.fillStyle = '#fff';
-        let eyeX = this.direction === 1 ? this.x + this.width - 8 : this.x + 3;
-        ctx.fillRect(eyeX, this.y + 8, 5, 5);
-
-        if (this.isAttackingSword) {
-            ctx.fillStyle = '#f1c40f';
-            let swordX = this.direction === 1 ? this.x + this.width : this.x - 20;
-            ctx.fillRect(swordX, this.y + 15, 20, 10);
-        }
-
-        if (this.isChargingBow) {
-            ctx.strokeStyle = '#e67e22';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            let bowX = this.direction === 1 ? this.x + this.width + 5 : this.x - 5;
-            ctx.arc(bowX, this.y + this.height/2, 12, -Math.PI/2, Math.PI/2, this.direction === -1);
-            ctx.stroke();
-        }
-
-        // --- New: Floating Info Above Player ---
-        ctx.textAlign = 'center';
-        
-        // 1. Draw Lives/Health (e.g., ❤❤❤)
-        ctx.font = '12px Arial';
-        ctx.fillStyle = '#ff4757';
-        let livesText = '❤'.repeat(Math.max(0, this.lives));
-        // Placed 30 pixels above the player's head
-        ctx.fillText(livesText, this.x + this.width / 2, this.y - 30);
-
-        // 2. Draw Chosen Arrow Type
-        ctx.font = '10px Arial';
-        ctx.fillStyle = '#ffffff';
-        let arrowText = `Arrow: ${this.chosenArrow}`;
-        // Placed 18 pixels above the player's head
-        ctx.fillText(arrowText, this.x + this.width / 2, this.y - 18);
-
-        ctx.font = '15px Arial';
-        ctx.fillStyle = '#ff0015';
-        let killsText = "Kills: " + this.kills;
-        ctx.fillText(killsText, this.x + this.width / 2, this.y - 50);
-
-
-        // 3. Draw Bow Charge Bar (Only shows when actively charging)
-        if (this.isChargingBow && this.bowCharge > 0) {
-            let barWidth = 30;
-            let barHeight = 4;
-            let barX = this.x + (this.width - barWidth) / 2;
-            let barY = this.y - 8; // Placed 8 pixels above the player's head
-
-            // Background of charge bar (Dark gray)
-            ctx.fillStyle = '#2c3e50';
-            ctx.fillRect(barX, barY, barWidth, barHeight);
-
-            // Foreground charge level (Orange)
-            ctx.fillStyle = '#e67e22';
-            let currentChargeWidth = (this.bowCharge / MAX_CHARGE) * barWidth;
-            ctx.fillRect(barX, barY, currentChargeWidth, barHeight);
-        }
-    }
 }
 
 // Game Mode Setup Options
@@ -782,7 +671,7 @@ function startBotGame() {
     const livesInput = document.getElementById('lives-picker');
     currentMatchMaxLives = livesInput ? parseInt(livesInput.value, 10) : 5;
     
-    const sharedControls = { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o', teleport: '2', default: '1'};
+    const sharedControls = { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o', teleport: '2', default: '1', explode: '3'};
     characters = [
         new Player(100, 300, '#3498db', sharedControls, 1),
         new Bot(880, 300, '#e74c3c', 2),
@@ -809,8 +698,8 @@ function startLocalGame() {
     currentMatchMaxLives = livesInput ? parseInt(livesInput.value, 10) : 5;
     
     characters = [
-        new Player(100, 300, '#3498db', { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'x', bow: 'c', teleport: '2', default: '1'}, 1),
-        new Player(200, 300, '#c5db34', { left: 'ArrowLeft', right: 'ArrowRight', jump: 'ArrowUp', down: 'ArrowDown', sword: '.', bow: '/', teleport: '\'', default: '#' }, 5),
+        new Player(100, 300, '#3498db', { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'x', bow: 'c', teleport: '2', default: '1', explode: '3'}, 1),
+        new Player(800, 300, '#c5db34', { left: 'ArrowLeft', right: 'ArrowRight', jump: 'ArrowUp', down: 'ArrowDown', sword: '.', bow: '/', teleport: '\'', default: '#', explode: ';'}, 2),
     ];
     
     // Override standard instance defaults with selected settings
@@ -883,7 +772,7 @@ function startMultiplayerGame(hostFlag) {
 }
 
 function setupNetworkEvents() {
-    const sharedControls = { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o', teleport: '2', default: '1' };
+    const sharedControls = { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o', teleport: '2', default: '1', explode: '3'};
     
     conn.on('open', () => {
         const statusEl = document.getElementById('multiplayer-status');
@@ -1026,10 +915,22 @@ function gameLoop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     // Draw the synchronized map layout
+    let plats_to_remove = [];
     for (let plat of level) {
-        ctx.fillStyle = plat.downable ? '#ff8b8b' : '#7f8c8d';
+        ctx.fillStyle = plat.downable ? '#ffb9b9' : plat.kill ? '#ff8746' : '#7f8c8d';
         ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+
+        if (plat.removeDelay !== undefined) {
+            plat.removeDelay--;
+            if (plat.removeDelay === 0) {
+                plats_to_remove.push(level.indexOf(plat));
+            }
+        }
     }
+
+    plats_to_remove.forEach(i => {
+        level.splice(i);
+    });
 
     if (running()) {
         // Run full physics/controls updates for the locally controlled entity slot
