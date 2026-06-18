@@ -332,7 +332,17 @@ class Character {
     } 
 
     shootArrow() {
-        let power = (this.bowCharge / MAX_CHARGE) * 15 + 5; 
+        let power = (this.bowCharge / MAX_CHARGE) * 15 + 5;
+        const arrowData = {
+            x: this.direction === 1 ? this.x + this.width : this.x - 15,
+            y: this.y + this.height / 2 - 2,
+            vx: this.direction * power,
+            vy: -power * 0.15,
+            ownerId: this.id,
+            width: 15,
+            height:4,
+            type:this.chosenArrow,
+        }
         existingArrows.push(new Arrow(
             this.direction === 1 ? this.x + this.width : this.x - 15,
             this.y + this.height / 2 - 2,
