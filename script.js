@@ -1,3 +1,5 @@
+const HACKING = true;
+
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
@@ -6,7 +8,6 @@ const GRAVITY = 0.5;
 const ARROW_GRAVITY = 0.15;
 const MAX_CHARGE = 150;
 const CHARGE_SPEED = 2;
-const HACKING = false;
 const arrowTypes = ['default', 'teleport', 'explode', 'build'];
 
 let currentMatchMaxLives = 5;
@@ -28,6 +29,7 @@ let isHost = false;
 const keys = {};
 window.addEventListener('keydown', (e) => keys[e.key] = true);
 window.addEventListener('keyup', (e) => keys[e.key] = false);
+const sharedControls = { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o', teleport: '2', default: '1', explode: '3', build: '4'}
 
 // Arena Structure
 const levels = [
@@ -213,7 +215,7 @@ class Arrow {
 
         let hitTarget = false;
         for (let target of characters) {
-            if (!this.type === 'build') {
+            if (this.type !== 'build') {
                 if (!target.isDead) {
                     if (this.x < target.x + target.width &&
                         this.x + this.width > target.x &&
@@ -532,9 +534,6 @@ class Player extends Character {
         // Manage sword timer tracking
         if (this.swordTimer > 0) {
             this.swordTimer--;
-            
-            // Turn off the hitbox/visuals after 0.5 seconds (30 frames)
-            // The remaining 42 frames serve as the active cooldown period
             if (this.swordTimer <= 42) {
                 this.isAttackingSword = false;
             }
@@ -710,7 +709,6 @@ function startBotGame() {
     const livesInput = document.getElementById('lives-picker');
     currentMatchMaxLives = livesInput ? parseInt(livesInput.value, 10) : 5;
     
-    const sharedControls = { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o', teleport: '2', default: '1', explode: '3', build: '4'};
     characters = [
         new Player(100, 300, '#3498db', sharedControls, 1),
         new Bot(880, 300, '#e74c3c', 2),
@@ -811,8 +809,6 @@ function startMultiplayerGame(hostFlag) {
 }
 
 function setupNetworkEvents() {
-    const sharedControls = { left: 'a', right: 'd', jump: 'w', down: 's', sword: 'k', bow: 'o', teleport: '2', default: '1', explode: '3'};
-    
     conn.on('open', () => {
         const statusEl = document.getElementById('multiplayer-status');
         if (statusEl) statusEl.innerText = "Connected! Starting game...";
