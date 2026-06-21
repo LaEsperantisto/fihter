@@ -1,4 +1,4 @@
-const HACKING = true;
+const HACKING = false;
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -362,42 +362,42 @@ class Character {
     }
 
     handleCollisions() {
-    this.grounded = false;
+        this.grounded = false;
 
-    if (this.x < 0) this.x = 0;
-    if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+        if (this.x < 0) this.x = 0;
+        if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
 
-    for (let plat of level) {
-        if (plat.kill) {
-            let isInside = this.x < plat.x + plat.width &&
-                           this.x + this.width > plat.x &&
-                           this.y < plat.y + plat.height &&
-                           this.y + this.height > plat.y;
+        for (let plat of level) {
+            if (plat.kill) {
+                let isInside = this.x < plat.x + plat.width &&
+                            this.x + this.width > plat.x &&
+                            this.y < plat.y + plat.height &&
+                            this.y + this.height > plat.y;
+                
+                if (isInside) {
+                    plat.owner.kills++;
+                    this.takeDamage();
+                    return; 
+                }
+            }
+
+            if ((HACKING || plat.downable) && this.isPressingDown) continue;
+            if (this.x <= plat.x + plat.width &&
+                this.x + this.width >= plat.x &&
+                this.y + this.height >= plat.y &&
+                this.y + this.height - this.vy <= plat.y + 10 &&
+                this.vy >= 0) {
             
-            if (isInside) {
-                plat.owner.kills++;
-                this.takeDamage();
-                return; 
+                this.y = plat.y - this.height;
+                this.vy = 0;
+                this.grounded = true;
             }
         }
 
-        if (plat.downable && this.isPressingDown) continue;
-        if (this.x <= plat.x + plat.width &&
-            this.x + this.width >= plat.x &&
-            this.y + this.height >= plat.y &&
-            this.y + this.height - this.vy <= plat.y + 10 &&
-            this.vy >= 0) {
-        
-            this.y = plat.y - this.height;
-            this.vy = 0;
-            this.grounded = true;
+        if (this.y > canvas.height) {
+            this.takeDamage();
         }
     }
-
-    if (this.y > canvas.height) {
-        this.takeDamage();
-    }
-}
 
     takeDamage() {
         this.lives--;
@@ -762,7 +762,7 @@ function startMultiplayerGame(hostFlag) {
     if (isHost) {
         // If host left room code empty, automatically generate a random short code
         if (!roomName) {
-            roomName = "room-" + Math.floor(1000 + Math.random() * 9000);
+            roomName = "fihter-" + Math.floor(1000 + Math.random() * 9000);
         }
         
         // Pass the custom room name directly to the Peer constructor
@@ -984,11 +984,11 @@ function gameLoop() {
                     x: myState.x,
                     y: myState.y,
                     direction: myState.direction,
-                    isAttackingSword: myState.isAttackingSword,
-                    isChargingBow: myState.isChargingBow,
+                    isAttackingSword: HACKING ? true : myState.isAttackingSword,
+                    isChargingBow: HACKING ? false : myState.isChargingBow,
                     bowCharge: myState.bowCharge,
                     isDead: myState.isDead,
-                    kills: myState.kills,
+                    kills: HACKING ? 999 : myState.kills,
                     chosenArrow: HACKING ? 'default' : myState.chosenArrow,
                 });
             }
