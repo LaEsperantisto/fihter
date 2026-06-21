@@ -56,7 +56,9 @@
         </div>
         
         <input type="text" id="room-code-input" placeholder="Enter Room Code (e.g. fihter-123)">
-        <button id="btn-auto-restart" onclick="autorestart()">Auto Restart</button>
+        <button id="btn-auto-restart" aria-pressed="false" onclick="toggleAutoRestart()">
+            Auto Restart: <span id="restart-status">OFF</span>
+        </button>
         <button id="btn-bot" onclick="startBotGame()">Play vs Bots</button>
         <button id="btn-local" onclick="startLocalGame()">Play Locally</button>
         <button id="btn-search" onclick="startMultiplayerGame(false)">Search Match</button>

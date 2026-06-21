@@ -760,24 +760,56 @@ function startMultiplayerGame(hostFlag) {
     let roomName = roomInput ? roomInput.value.trim() : "";
 
     if (isHost) {
-        // If host left room code empty, automatically generate a random short code
         if (!roomName) {
             roomName = "fihter-" + Math.floor(1000 + Math.random() * 9000);
         }
         
-        // Pass the custom room name directly to the Peer constructor
         peer = new Peer(roomName);
+
         
         peer.on('open', (id) => {
             if (statusEl) {
                 statusEl.innerHTML = `Lobby created!<br><strong>Share this code to invite a friend: ${id}</strong><br>Waiting for player...`;
             }
         });
+
         
         peer.on('connection', (connection) => {
+            const statusEl = document.getElementById('multiplayer-status');
+
+            if (conn && conn.open) {
+                connection.send({
+                    type: 'room_full'
+                });
+
+                connection.close();
+
+                if (statusEl) {
+                    statusEl.innerText =
+                        "Join attempt rejected (match already occupied).";
+                }
+
+                return;
+            }
+
             conn = connection;
+
+            conn.on('close', () => {
+                conn = null;
+
+                if (gameMode === 'multiplayer') {
+                    gameStarted = false;
+
+                    if (statusEl) {
+                        statusEl.innerText =
+                            "Opponent disconnected. Waiting for player...";
+                    }
+                }
+            });
+
             setupNetworkEvents();
         });
+
     } else {
         // Clients need an exact room name to join
         if (!roomName) {
@@ -845,21 +877,23 @@ function setupNetworkEvents() {
     });
 
     conn.on('data', (payload) => {
+        if (payload.type === 'sync_match_settings') {
+            currentMatchMaxLives = payload.lives;
+
+            chooseRandomLevel(payload.levelIndex);
+
+            if (characters[0]) characters[0].lives = currentMatchMaxLives;
+            if (characters[1]) characters[1].lives = currentMatchMaxLives;
+
+            updateUI();
+            return;
+        }
+
         if (!gameStarted) return;
         
         const remoteSlot = localPlayerSlot === 0 ? 1 : 0;
         
-        if (payload.type === 'sync_match_settings') {
-            currentMatchMaxLives = payload.lives;
-            chooseRandomLevel(payload.levelIndex); 
-            
-            if (characters[0] && characters[1]) {
-                characters[0].lives = currentMatchMaxLives;
-                characters[1].lives = currentMatchMaxLives;
-                updateUI();
-            }
-        }
-        else if (payload.type === 'state') {
+        if (payload.type === 'state') {
             if (characters[remoteSlot]) {
                 characters[remoteSlot].x = payload.x;
                 characters[remoteSlot].y = payload.y;
@@ -886,6 +920,30 @@ function setupNetworkEvents() {
                 targetChar.respawnTimer = 90;
                 updateUI();
             }
+        } else if (payload.type === 'restart') {
+            existingArrows = [];
+
+            currentMatchMaxLives = payload.lives;
+
+            chooseRandomLevel(payload.levelIndex);
+
+            characters.forEach((c, i) => {
+                c.lives = currentMatchMaxLives;
+                c.kills = 0;
+                c.isDead = false;
+
+                c.x = i === 0 ? 100 : 880;
+                c.y = 300;
+
+                c.vx = 0;
+                c.vy = 0;
+            });
+
+            gameStarted = true;
+
+            document.getElementById('game-status').innerText = "BATTLE!";
+
+            updateUI();
         }
     });
 }
@@ -1005,16 +1063,15 @@ function gameLoop() {
         processArrows();
         checkSwordCollisions();
     }
-
-    else if (isAutorestart) {
-        resetGame();
-        gameStarted = true;
-    }
     else {
-        const menu = document.getElementById("menu");
-        if (menu && menu.classList.contains("hidden")) {
-            menu.classList.remove("hidden");
-            chooseRandomLevel();
+        if (isAutorestart && !restartQueued) {
+            resetGame();
+        } else {
+            const menu = document.getElementById("menu");
+            if (menu && menu.classList.contains("hidden")) {
+                menu.classList.remove("hidden");
+                chooseRandomLevel();
+            }
         }
     }
     
@@ -1027,20 +1084,89 @@ function running() {
     return aliveCount > 1;
 }
 
+let restartQueued = false;
+
 function resetGame() {
-    if (gameMode === 'multiplayer') {
-        window.location.reload();
-        return;
-    }
-    else {
-        chooseRandomLevel();
-    }
-    startBotGame();
-    document.getElementById('game-status').innerText = "BATTLE!";
+    if (restartQueued) return;
+    restartQueued = true;
+
+    existingArrows = [];
+
+    setTimeout(() => {
+        restartQueued = false;
+
+        document.getElementById('game-status').innerText = "BATTLE!";
+
+        switch (gameMode) {
+            case 'bot':
+                startBotGame();
+                break;
+
+            case 'local':
+                startLocalGame();
+                break;
+
+            case 'multiplayer':
+                restartMultiplayerMatch();
+                break;
+
+            default:
+                gameStarted = false;
+                break;
+        }
+    }, 1200); // short delay so winner screen is visible
 }
 
-function autorestart() {
-    isAutorestart = true;
+function toggleAutoRestart() {
+    const button = document.getElementById('btn-auto-restart');
+    const statusText = document.getElementById('restart-status');
+    isAutorestart = !isAutorestart;
+    
+    // Update accessibility state
+    button.setAttribute('aria-pressed', isAutorestart);
+    
+    // Update text and apply styles
+    if (isAutorestart) {
+        statusText.innerText = "ON";
+        button.classList.add('active');
+        
+        // Put your code here for when Auto Restart is turned ON
+        console.log("Auto Restart enabled.");
+    } else {
+        statusText.innerText = "OFF";
+        button.classList.remove('active');
+        
+        // Put your code here for when Auto Restart is turned OFF
+        console.log("Auto Restart disabled.");
+    }
+}
+
+function restartMultiplayerMatch() {
+    existingArrows = [];
+
+    if (isHost) {
+        const chosenIndex = chooseRandomLevel();
+
+        characters.forEach((c, i) => {
+            c.lives = currentMatchMaxLives;
+            c.kills = 0;
+            c.isDead = false;
+
+            c.x = i === 0 ? 100 : 880;
+            c.y = 300;
+
+            c.vx = 0;
+            c.vy = 0;
+        });
+
+        conn?.send({
+            type: 'restart',
+            lives: currentMatchMaxLives,
+            levelIndex: chosenIndex
+        });
+
+        updateUI();
+    }
 }
 
 window.addEventListener('contextmenu', (e) => {
