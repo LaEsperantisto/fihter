@@ -2,23 +2,27 @@ const HACKING = false;
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+const winnerDiv = document.getElementById('winner');
 
 // Global Constants
 const GRAVITY = 0.5;
 const ARROW_GRAVITY = 0.15;
 const MAX_CHARGE = 150;
-const CHARGE_SPEED = 2;
+const CHARGE_SPEED = 3;
 const arrowTypes = ['default', 'teleport', 'explode', 'build'];
 
-let currentMatchMaxLives = 5;
 
-// Game State Engine Variables
+// Game Global Variables
 let gameStarted = false;
 let gameMode = 'menu'; // 'menu', 'local', 'bot', 'multiplayer'
 let characters = [];
 let localPlayerSlot = 0; // Index of the local browser entity in characters array
 let isAutorestart = false;
 let killDelay = 10;
+let currentMatchMaxLives = 5;
+let hitFreeze = 0;
+let shake = 0;
+let countdownActive = false;
 
 // PeerJS Networking Variables
 let peer = null;
@@ -299,8 +303,35 @@ class Arrow {
     }
 
     draw() {
-        ctx.fillStyle = this.type === 'teleport' ? '#9b59b6' : this.type === 'explode' ? '#ffb039' : '#ecf0f1';
-        ctx.fillRect(this.x, this.y, this.width, this.height);
+        
+        switch (this.type) {
+            case 'teleport':
+                ctx.fillStyle = '#9b59b6';
+                break;
+            case 'explode':
+                ctx.fillStyle = '#ffb039';
+                break;
+            default:
+                ctx.fillStyle = '#ecf0f1';
+                break;
+        }
+
+        ctx.globalAlpha = 0.2;
+        ctx.fillRect(
+            this.x - this.vx * 2,
+            this.y - this.vy * 2,
+            this.width,
+            this.height
+        );
+
+        ctx.globalAlpha = 1;
+
+        ctx.fillRect(
+            this.x,
+            this.y,
+            this.width,
+            this.height
+        );
     }
 }
 
@@ -331,6 +362,9 @@ class Character {
         this.bowCharge = 0;
         this.isDead = false;
         this.respawnTimer = 0;
+        this.coyoteTime = 0;
+        this.jumpBuffer = 0;
+        this.invuln = 0;
     } 
 
     shootArrow() {
@@ -400,9 +434,13 @@ class Character {
     }
 
     takeDamage() {
+        if (this.invuln > 0) return;
+
         this.lives--;
         this.isDead = true;
         this.respawnTimer = 90;
+        hitFreeze = 6;
+        shake = 12;
         updateUI();
 
         if (gameMode === 'multiplayer' && conn && conn.open) {
@@ -416,22 +454,38 @@ class Character {
         this.y = Math.random() * (canvas.height - 200) + 50;
         this.vx = 0;
         this.vy = 0;
+        this.invuln = 120;
     }
 
     draw() {
         if (this.isDead) return;
 
-        // --- Draw Player Character ---
-        if (gameMode === 'bot' && characters[localPlayerSlot] === this) {
-            ctx.fillStyle = '#fffb00';
-            ctx.fillRect(this.x - 2, this.y - 2, this.width + 4, this.height + 4);
-        }
-        ctx.fillStyle = this.color;
-        ctx.fillRect(this.x, this.y, this.width, this.height);
+        let playerHidden = false;
 
-        ctx.fillStyle = '#fff';
-        let eyeX = this.direction === 1 ? this.x + this.width - 8 : this.x + 3;
-        ctx.fillRect(eyeX, this.y + 8, 5, 5);
+        if (this.invuln > 0) {
+            this.invuln--;
+
+            if (Math.floor(this.invuln / 10) % 2 === 0) {
+                playerHidden = true;
+            }
+        }
+
+        if (!playerHidden) {
+            
+            if (gameMode === 'bot' && characters[localPlayerSlot] === this) {
+                ctx.fillStyle = '#fffb00';
+                ctx.fillRect(this.x - 2, this.y - 2, this.width + 4, this.height + 4);
+            }
+
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+        
+
+            ctx.fillStyle = '#fff';
+            let eyeX = this.direction === 1 ? this.x + this.width - 8 : this.x + 3;
+            ctx.fillRect(eyeX, this.y + 8, 5, 5);
+
+        }
 
         if (this.isAttackingSword) {
             ctx.fillStyle = '#f1c40f';
@@ -494,6 +548,8 @@ class Player extends Character {
     }
 
     update() {
+        if (!gameStarted) return;
+
         if (this.isDead) {
             this.respawnTimer--;
             if (this.respawnTimer <= 0 && this.lives > 0) {
@@ -504,28 +560,55 @@ class Player extends Character {
 
         this.vy += GRAVITY;
         this.isPressingDown = false;
-        this.vx = 0;
+        
+        this.accel = 2;
+        this.friction = 0.85;
 
         if (keys[this.controls.left]) {
-            this.vx = -this.speed;
+            this.vx -= this.accel;
             this.direction = -1;
         }
+
         if (keys[this.controls.right]) {
-            this.vx = this.speed;
+            this.vx += this.accel;
             this.direction = 1;
         }
 
-        if (keys[this.controls.jump] && this.grounded) {
+        this.vx *= this.friction;
+
+        if (Math.abs(this.vx) < 0.1) {
+            this.vx = 0;
+        }
+
+        this.vx = Math.max(
+            -this.speed,
+            Math.min(this.speed, this.vx)
+        );
+
+        if (this.grounded) {
+            this.coyoteTime = 8;
+        } else {
+            this.coyoteTime--;
+        }
+
+        if (keys[this.controls.jump]) {
+            this.jumpBuffer = 8;
+        } else {
+            this.jumpBuffer--;
+        }
+
+        if (this.jumpBuffer > 0 && this.coyoteTime > 0) {
             this.vy = -this.jumpForce;
+
             this.grounded = false;
+            this.jumpBuffer = 0;
+            this.coyoteTime = 0;
         }
 
         if (keys[this.controls.down]) {
             this.isPressingDown = true;
         }
 
-        // --- UPDATED SWORD ATTACK LOGIC ---
-        // Player can only swing if they aren't already swinging/cooling down (swordTimer <= 0)
         if (keys[this.controls.sword] && this.swordTimer <= 0 && !this.isChargingBow) {
             this.isAttackingSword = true;
             this.swordTimer = 72; // 0.5s active (30 frames) + 0.7s cooldown (42 frames) = 72 frames total
@@ -548,7 +631,7 @@ class Player extends Character {
         } else if (this.isChargingBow) {
             this.shootArrow();
             this.isChargingBow = false;
-            this.bowCharge = -30;
+            this.bowCharge = 0;
         }
 
         if (keys[this.controls.default]) {
@@ -592,6 +675,8 @@ class Bot extends Character  {
     }
 
     update(characters) {
+        if (!gameStarted) return;
+
         if (this.isDead) {
             this.respawnTimer--;
             if (this.respawnTimer <= 0 && this.lives > 0) {
@@ -702,8 +787,12 @@ class Bot extends Character  {
 // Game Mode Setup Options
 function startBotGame() {
     gameMode = 'bot';
-    gameStarted = true;
     localPlayerSlot = 0;
+    gameStarted = false;
+
+    startCountdown(() => {
+        gameStarted = true;
+    });
     
     // Grab the custom starting lives right as the game triggers
     const livesInput = document.getElementById('lives-picker');
@@ -727,8 +816,12 @@ function startBotGame() {
 
 function startLocalGame() {
     gameMode = 'local';
-    gameStarted = true;
     localPlayerSlot = 0;
+    gameStarted = false;
+
+    startCountdown(() => {
+        gameStarted = true;
+    }); 
     
     // Grab the custom starting lives right as the game triggers
     const livesInput = document.getElementById('lives-picker');
@@ -872,7 +965,12 @@ function setupNetworkEvents() {
         characters[0].lives = currentMatchMaxLives;
         characters[1].lives = currentMatchMaxLives;
         
-        gameStarted = true;
+        gameStarted = false;
+
+        startCountdown(() => {
+            gameStarted = true;
+        });
+
         updateUI();
     });
 
@@ -959,16 +1057,18 @@ function updateUI() {
     const livesEl = document.getElementById(`lives`);
     const chargeEl = document.getElementById(`charge`);
     const killEl = document.getElementById(`kill-counter`);
+    const idEl = document.getElementById('player-id');
     
     if (livesEl) livesEl.innerText = '❤'.repeat(Math.max(0, p.lives)) || 'DEAD';
     if (chargeEl) chargeEl.style.width = p.bowCharge + '%';
     if (killEl) killEl.innerText = "Kills: " + p.kills;
-
+    if (idEl) idEl.innerText = p.id;
 
     const activePlayers = characters.filter(p => p.lives > 0);
     if (gameStarted && activePlayers.length <= 1) {
         if (activePlayers.length === 1) {
             document.getElementById('game-status').innerText = `PLAYER ${activePlayers[0].id} WINS!`;
+            winner = activePlayers[0];
         } else if (activePlayers.length === 0) {
             document.getElementById('game-status').innerText = "MUTUAL DESTRUCTION!";
         }
@@ -1004,7 +1104,27 @@ function checkSwordCollisions() {
     }
 }
 
+
 function gameLoop() {
+    if (hitFreeze > 0) {
+        hitFreeze--;
+
+        requestAnimationFrame(gameLoop);
+
+        return;
+    }
+
+    ctx.save();
+
+    if (shake > 0) {
+        shake--;
+
+        ctx.translate(
+            (Math.random() - 0.5) * shake,
+            (Math.random() - 0.5) * shake
+        );
+    }
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     // Draw the synchronized map layout
@@ -1023,8 +1143,8 @@ function gameLoop() {
         characters[localPlayerSlot].update();
 
         if (gameMode === 'bot' || gameMode === 'local') {
-            characters.slice(1).forEach(e => {e.update(characters); });
-        } 
+            characters.slice(1).forEach(e => { e.update(characters); });
+        }
         else if (gameMode === 'multiplayer') {
             const remoteSlot = localPlayerSlot === 0 ? 1 : 0;
             if (characters[remoteSlot] && characters[remoteSlot].isDead) {
@@ -1052,35 +1172,70 @@ function gameLoop() {
             }
         }
 
-        const menu = document.getElementById("menu");
-        if (menu && !menu.classList.contains("hidden")) {
-            menu.classList.add("hidden");
-        }
-
         // Render everything visually
         characters.forEach(p => p.draw());
 
         processArrows();
         checkSwordCollisions();
     }
-    else {
+    else if (!countdownActive) {
+        if (winner)
+            winnerDiv.innerText = `Player ${winner.id} wins!`;
+
         if (isAutorestart && !restartQueued) {
             resetGame();
         } else {
-            const menu = document.getElementById("menu");
-            if (menu && menu.classList.contains("hidden")) {
+            const menu =
+                document.getElementById("menu");
+
+            if (
+                menu &&
+                menu.classList.contains("hidden")
+            ) {
                 menu.classList.remove("hidden");
                 chooseRandomLevel();
             }
         }
     }
     
+    ctx.restore();
+
     requestAnimationFrame(gameLoop);
+}
+
+function startCountdown(onFinish) {
+    countdownActive = true;
+
+    const menu = document.getElementById("menu");
+    const status = document.getElementById("game-status");
+
+    menu.classList.add("hidden");
+
+    let count = 3;
+    status.innerText = count;
+
+    const timer = setInterval(() => {
+        count--;
+
+        if (count > 0) {
+            status.innerText = count;
+        } else {
+            clearInterval(timer);
+
+            countdownActive = false;
+
+            status.innerText = "BATTLE!";
+            onFinish();
+        }
+    }, 1000);
 }
 
 function running() {
     if (!gameStarted) return false;
-    const aliveCount = characters.filter(p => p.lives > 0).length;
+    const aliveCount = characters.filter(p => {
+        const alive = p.lives > 0;
+        return alive;
+    }).length;
     return aliveCount > 1;
 }
 
@@ -1114,7 +1269,7 @@ function resetGame() {
                 gameStarted = false;
                 break;
         }
-    }, 1200); // short delay so winner screen is visible
+    }, 1200);
 }
 
 function toggleAutoRestart() {
@@ -1168,6 +1323,8 @@ function restartMultiplayerMatch() {
         updateUI();
     }
 }
+
+let winner;
 
 window.addEventListener('contextmenu', (e) => {
     if (e.target.classList.contains('ctrl-btn')) {

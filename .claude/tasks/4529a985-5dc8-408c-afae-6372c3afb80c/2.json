@@ -1,0 +1,8 @@
+{
+  "id": "2",
+  "subject": "Create test files to reproduce the bug",
+  "description": "Create two .obs files: one defining a function and another that uses it via `use`.",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

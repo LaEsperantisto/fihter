@@ -1,0 +1,8 @@
+{
+  "id": "4",
+  "subject": "Add ref to Type system",
+  "description": "Register \"ref\" type in CompileTimeEnv, support generic ref&lt;&lt;T&gt;&gt; types",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,0 +1,8 @@
+{
+  "id": "3",
+  "subject": "Add inline C code for vec functions in CodeGenContext",
+  "description": "Add C implementations for push, clone_vec, and pop functions that operate on vec types. These need to handle the struct { size, data } layout and use proper typedef generation for generic element types.",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

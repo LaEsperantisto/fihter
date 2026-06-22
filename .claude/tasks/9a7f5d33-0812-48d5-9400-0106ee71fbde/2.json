@@ -1,0 +1,8 @@
+{
+  "id": "2",
+  "subject": "Update parser for @param mutability",
+  "description": "Add @ check in define_function and define_lambda, update parameter tuples",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

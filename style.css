@@ -20,12 +20,21 @@ body {
     margin-bottom: 10px;
 }
 
-.hud {
-    background: rgba(0, 0, 0, 0.6);
-    padding: 10px 20px;
-    border-radius: 5px;
-    border: 2px solid #555;
-    width: 200px;
+.hud{
+    backdrop-filter: blur(12px);
+
+    background:
+        linear-gradient(
+            rgba(255,255,255,.06),
+            rgba(255,255,255,.02)
+        );
+
+    border: 1px solid rgba(255,255,255,.18);
+
+    box-shadow:
+        0 8px 30px rgba(0,0,0,.45);
+
+    transition:.2s;
 }
 
 #p1-hud { border-color: #3498db; }

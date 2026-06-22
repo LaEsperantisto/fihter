@@ -1,0 +1,8 @@
+{
+  "id": "4",
+  "subject": "Handle Vector expression in expr_to_c.rs",
+  "description": "Handle Vector in to_c (generate C code for vec creation), get_type (return vec<<T>>), and pre_transpile (register vec type instances)",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

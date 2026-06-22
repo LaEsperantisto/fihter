@@ -1,0 +1,8 @@
+{
+  "id": "2",
+  "subject": "Register vec type and builtin functions in CompileTimeEnv",
+  "description": "Add vec as a type after ref (id=7). Register push, clone_vec, and pop as generic builtin functions with appropriate type signatures.",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,0 +1,8 @@
+{
+  "id": "1",
+  "subject": "Add @param mutability to expr.rs",
+  "description": "Change Vec<(String, Type)> to Vec<(String, Type, bool)> in DeclareFunction and Function variants",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,0 +1,874 @@
+use crate::expr::UseKind;
+use crate::span::Span;
+use crate::token_type::TokenType::Pound;
+use crate::type_env::{nil_type, Type};
+use crate::{error, expr::Expr, token::Token, token_type::TokenType};
+
+pub struct Parser<'a> {
+    tokens: &'a [Token],
+    current: usize,
+}
+
+impl<'a> Parser<'a> {
+    pub fn new(tokens: &'a [Token]) -> Self {
+        Self { tokens, current: 0 }
+    }
+
+    // ---------- ENTRY ----------
+    pub fn parse(&mut self) -> Expr {
+        let mut statements = Vec::new();
+
+        while !self.is_at_end() {
+            statements.push(Box::new(self.statement()));
+            if !self.match_any(&[TokenType::Semicolon]) && !self.is_at_end() {
+                let t = self.peek();
+                error(
+                    self.get_span(),
+                    format!("Expected ';' after statement. Found '{}'", t.token_type).as_str(),
+                    "parsing",
+                );
+                self.advance();
+            }
+        }
+
+        Expr::StmtBlock(statements, self.get_span())
+    }
+
+    // ---------- STATEMENTS ----------
+    fn statement(&mut self) -> Expr {
+        if self.match_any(&[TokenType::Dollar]) {
+            return self.print();
+        }
+
+        if self.match_any(&[TokenType::Ret]) {
+            return self.return_stmt();
+        }
+
+        if self.match_any(&[Pound]) {
+            return self.while_loop();
+        }
+
+        if self.match_any(&[TokenType::Fn]) {
+            return self.define_function();
+        }
+
+        if self.match_any(&[TokenType::Hash]) {
+            return self.declaration();
+        }
+
+        if self.match_any(&[TokenType::Del]) {
+            return self.delete();
+        }
+
+        if self.match_any(&[TokenType::QuestionMark]) {
+            return self.if_statement(false);
+        }
+
+        if self.match_any(&[TokenType::Use]) {
+            return self.use_file();
+        }
+
+        if self.match_any(&[TokenType::For]) {
+            return self.for_loop();
+        }
+
+        if self.match_any(&[TokenType::Cls]) {
+            return self.class();
+        }
+
+        Expr::Stmt(Box::new(self.expression()))
+    }
+
+    // ---------- USE ------------
+
+    fn use_file(&mut self) -> Expr {
+        let kind = if self.match_any(&[TokenType::Std]) {
+            UseKind::Std
+        } else {
+            UseKind::Normal
+        };
+        self.consume(TokenType::String, "Expected file name after 'use' keyword");
+        Expr::Use {
+            kind,
+            path: self.previous().literal,
+            span: self.get_span(),
+        }
+    }
+
+    // ---------- BLOCK ----------
+    fn statement_block(&mut self) -> Expr {
+        let mut statements = Vec::new();
+
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+            let statement = self.statement();
+
+            if !self.check(TokenType::Semicolon) && !self.check(TokenType::RightBrace) {
+                let t = self.peek();
+                error(
+                    self.get_span(),
+                    format!("Expected ';' after statement. Found '{}'", t.token_type).as_str(),
+                    "parsing",
+                );
+                self.advance();
+            }
+            if self.match_any(&[TokenType::Semicolon]) {
+                statements.push(Box::new(Expr::Discard(Box::new(statement))));
+            } else {
+                statements.push(Box::new(statement));
+            }
+        }
+
+        self.consume(TokenType::RightBrace, "Expected '}' after block.");
+        Expr::StmtBlockWithScope(statements, self.get_span())
+    }
+
+    // ---------- DELETE VAR -----------
+
+    fn delete(&mut self) -> Expr {
+        if self.match_any(&[TokenType::Ident]) {
+            Expr::Delete(self.previous().lexeme)
+        } else {
+            error(
+                self.get_span(),
+                "Expected variable name after 'del'.",
+                "parsing",
+            );
+            Expr::Nothing()
+        }
+    }
+
+    // ---------- NEW CLASS -----------
+
+    fn class(&mut self) -> Expr {
+        self.consume(TokenType::Ident, "Expected class name after 'cls'.");
+        let name = self.previous().lexeme;
+        self.consume(TokenType::LeftBrace, "Expected '{' after class name");
+
+        let mut members = Vec::new();
+
+        while !self.match_any(&[TokenType::RightBrace]) {
+            self.consume(
+                TokenType::Ident,
+                "Expected an identifier at start of line (in class declaration)",
+            );
+            let name = self.previous().lexeme;
+            self.consume(
+                TokenType::Colon,
+                "Expected colon after identifier in class declaration",
+            );
+
+            members.push((name, self.get_type()));
+        }
+
+        let class_type = Type::simple(&name);
+
+        Expr::Class(class_type, members, self.get_span())
+    }
+    // ---------- MEMBER VARIABLE -----------
+
+    fn member(&mut self) -> Expr {
+        let variable = self.nth();
+
+        if self.match_any(&[TokenType::Dot]) {
+            let member = self.ident();
+
+            Expr::Member(Box::new(variable), member, self.get_span())
+        } else {
+            variable
+        }
+    }
+
+    // ---------- WHILE LOOP -----------
+
+    fn while_loop(&mut self) -> Expr {
+        let cond = self.expression();
+        // self.current += 1;
+        let block = if self.match_any(&[TokenType::LeftBrace]) {
+            self.statement_block()
+        } else {
+            error(
+                self.get_span(),
+                ("Expected '{' after 'while' condition, found '".to_string()
+                    + self.previous().lexeme.as_str()
+                    + "'")
+                    .as_str(),
+                "parsing",
+            );
+            Expr::Nothing()
+        };
+
+        Expr::While(Box::new(cond), Box::new(block))
+    }
+
+    // ----------- FOR LOOP -----------
+
+    fn for_loop(&mut self) -> Expr {
+        self.consume(TokenType::Ident, "Expected identifier after 'For' token");
+        let loopee = self.previous().lexeme;
+        self.consume(TokenType::Colon, "Expected ':' after loopee");
+        let looper = self.expression();
+        self.consume(TokenType::LeftBrace, "Expected '{' after looper");
+        let block = self.statement_block();
+
+        Expr::For(loopee, Box::new(looper), Box::new(block), self.get_span())
+    }
+
+    // ---------- DECLARATION ----------
+    fn declaration(&mut self) -> Expr {
+        let is_mutable = self.match_any(&[TokenType::At]);
+
+        self.consume(TokenType::Ident, "Expected variable name.");
+        let name = self.previous().lexeme.clone();
+
+        let var_type = if self.match_any(&[TokenType::Colon]) {
+            Some(self.get_type())
+        } else {
+            None
+        };
+        let expr = if self.match_any(&[TokenType::Equal]) {
+            Some(Box::new(self.expression()))
+        } else {
+            None
+        };
+
+        if var_type.is_none() && expr.is_none() {
+            let span = self.get_span();
+            error(
+                span,
+                "Expected type or expression or both, got neither",
+                "parsing",
+            );
+        }
+        Expr::Declare(name, var_type, expr, is_mutable, self.get_span())
+    }
+
+    // ------- ASSIGNMENT -----------
+
+    fn assignment(&mut self) -> Expr {
+        let left = self.bools();
+        if self.match_any(&[TokenType::Equal]) {
+            let right = self.bools();
+            Expr::Assign(Box::new(left), Box::new(right), self.get_span())
+        } else {
+            left
+        }
+    }
+    // ------- IF / ELSE IF / ELSE ----
+
+    fn if_statement(&mut self, is_expr: bool) -> Expr {
+        let if_cond = self.expression();
+        // self.current += 1;
+        let if_block = if self.match_any(&[TokenType::LeftBrace]) {
+            self.statement_block()
+        } else {
+            error(
+                self.get_span(),
+                ("Expected '{' after 'if' condition, found '".to_string()
+                    + self.previous().lexeme.as_str()
+                    + "'")
+                    .as_str(),
+                "parsing",
+            );
+            Expr::Nothing()
+        };
+
+        let mut else_block = None;
+
+        if self.match_any(&[TokenType::TildeQuestionMark]) {
+            else_block = Some(Box::new(self.if_statement(is_expr)));
+        } else if self.match_any(&[TokenType::Tilde]) {
+            self.consume(TokenType::LeftBrace, "Expected '{' after 'TILDE'.");
+            else_block = Some(Box::new(self.statement_block()));
+        }
+
+        Expr::If(Box::new(if_cond), Box::new(if_block), else_block, is_expr)
+    }
+    // ---------- PRINT ---------------
+    fn print(&mut self) -> Expr {
+        if self.peek().token_type == TokenType::Dollar {
+            self.advance();
+            Expr::StmtBlock(
+                vec![
+                    Box::new(self.print()),
+                    Box::new(Expr::Print(
+                        Box::new(Expr::Str("\n".to_string())),
+                        self.get_span(),
+                    )),
+                ],
+                self.get_span(),
+            )
+        } else if self.peek().token_type == TokenType::Semicolon {
+            Expr::Nothing()
+        } else {
+            Expr::Print(Box::new(self.expression()), self.get_span())
+        }
+    }
+
+    // ---------- FUNCTIONS ------------
+
+    fn define_function(&mut self) -> Expr {
+        let mut generic_params = vec![];
+
+        if self.match_any(&[TokenType::LessLess]) {
+            loop {
+                self.consume(TokenType::Ident, "Expected generic name");
+                generic_params.push(self.previous().lexeme);
+
+                if !self.match_any(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+            self.consume(TokenType::GreaterGreater, "Expected '>'");
+        }
+
+        let name = self.advance().lexeme;
+
+        let start_span = self.get_span();
+
+        let parameters: Vec<(String, Type)> = if self.match_any(&[TokenType::LeftParen]) {
+            let mut parameters = vec![];
+            while !self.is_at_end() && !self.check(TokenType::RightParen) {
+                let name = self.advance().lexeme;
+                self.consume(TokenType::Colon, "Expected ':' after parameter name.");
+                let var_type = self.get_type();
+                parameters.push((name, var_type));
+                if !self.match_any(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+
+            self.consume(
+                TokenType::RightParen,
+                "Expected ')' after function parameters.",
+            );
+            parameters
+        } else {
+            vec![]
+        };
+
+        let return_type = if !self.check(TokenType::LeftBrace) {
+            Some(self.get_type())
+        } else {
+            None
+        };
+
+        self.consume(
+            TokenType::LeftBrace,
+            "Expected '{' after function declaration.",
+        );
+
+        let body = Box::new(self.statement_block());
+
+        Expr::DeclareFunction(
+            name,
+            body,
+            return_type,
+            parameters,
+            generic_params,
+            start_span,
+        )
+    }
+
+    fn define_lambda(&mut self) -> Expr {
+        let mut generic_params = vec![];
+
+        if self.match_any(&[TokenType::LessLess]) {
+            loop {
+                self.consume(TokenType::Ident, "Expected generic name");
+                generic_params.push(self.previous().lexeme);
+
+                if !self.match_any(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+            self.consume(TokenType::GreaterGreater, "Expected '>'");
+        }
+
+        let parameters: Vec<(String, Type)> = if self.match_any(&[TokenType::LeftParen]) {
+            let mut parameters = vec![];
+            while !self.is_at_end() && !self.check(TokenType::RightParen) {
+                let name = self.advance().lexeme;
+                self.consume(TokenType::Colon, "Expected ':' after parameter name.");
+                let var_type = self.get_type();
+                parameters.push((name, var_type));
+                if !self.match_any(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+
+            self.consume(
+                TokenType::RightParen,
+                "Expected ')' after function parameters.",
+            );
+            parameters
+        } else {
+            vec![]
+        };
+
+        let return_type = if !self.check(TokenType::LeftBrace) {
+            self.get_type()
+        } else {
+            nil_type()
+        };
+
+        self.consume(
+            TokenType::LeftBrace,
+            "Expected '{' after function declaration.",
+        );
+
+        let body = Box::new(self.statement_block());
+
+        Expr::Function(body, return_type, parameters, generic_params)
+    }
+
+    fn return_stmt(&mut self) -> Expr {
+        let value = self.expression();
+        Expr::Return(Box::new(value), self.get_span())
+    }
+
+    fn call_function(&mut self, name: String) -> Expr {
+        let mut generics = vec![];
+
+        if self.match_any(&[TokenType::LessLess]) {
+            loop {
+                generics.push(self.get_type());
+
+                if !self.match_any(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+            self.consume(TokenType::GreaterGreater, "Expected '>' after generics");
+        }
+
+        self.consume(TokenType::LeftParen, "Expected '(' after function name.");
+
+        let mut arguments = vec![];
+
+        if !self.check(TokenType::RightParen) {
+            loop {
+                arguments.push(Box::new(self.expression()));
+                if !self.match_any(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(TokenType::RightParen, "Missing ')' after function call.");
+
+        Expr::CallFunc(name, generics, arguments, self.get_span())
+    }
+
+    // ---------- EXPRESSIONS ----------
+    fn expression(&mut self) -> Expr {
+        self.assignment()
+    }
+
+    fn bools(&mut self) -> Expr {
+        let mut expr = self.compare();
+
+        while self.match_any(&[TokenType::And, TokenType::Or]) {
+            let op = self.previous().token_type;
+            let right = self.compare();
+            expr = match op {
+                TokenType::And => Expr::And(Box::new(expr), Box::new(right), self.get_span()),
+                TokenType::Or => Expr::Or(Box::new(expr), Box::new(right), self.get_span()),
+                _ => unreachable!(),
+            };
+        }
+
+        expr
+    }
+
+    fn compare(&mut self) -> Expr {
+        let mut expr = self.term();
+
+        while self.match_any(&[
+            TokenType::EqualEqual,
+            TokenType::BangEqual,
+            TokenType::Greater,
+            TokenType::GreaterEqual,
+            TokenType::Less,
+            TokenType::LessEqual,
+        ]) {
+            let op = self.previous().token_type;
+            let right = self.term();
+            expr = match op {
+                TokenType::EqualEqual => {
+                    Expr::EqualEqual(Box::new(expr), Box::new(right), self.get_span())
+                }
+                TokenType::BangEqual => {
+                    Expr::BangEqual(Box::new(expr), Box::new(right), self.get_span())
+                }
+                TokenType::Greater => {
+                    Expr::Greater(Box::new(expr), Box::new(right), self.get_span())
+                }
+                TokenType::GreaterEqual => {
+                    Expr::GreaterEqual(Box::new(expr), Box::new(right), self.get_span())
+                }
+                TokenType::Less => Expr::Less(Box::new(expr), Box::new(right), self.get_span()),
+                TokenType::LessEqual => {
+                    Expr::LessEqual(Box::new(expr), Box::new(right), self.get_span())
+                }
+                _ => unreachable!(),
+            };
+        }
+
+        expr
+    }
+
+    fn term(&mut self) -> Expr {
+        let mut expr = self.factor();
+
+        while self.match_any(&[TokenType::Plus, TokenType::Minus]) {
+            let op = self.previous().token_type;
+            let right = self.factor();
+            expr = match op {
+                TokenType::Plus => Expr::Add(Box::new(expr), Box::new(right), self.get_span()),
+                TokenType::Minus => Expr::Sub(Box::new(expr), Box::new(right), self.get_span()),
+                _ => unreachable!(),
+            };
+        }
+
+        expr
+    }
+
+    fn factor(&mut self) -> Expr {
+        let mut expr = self.unary();
+
+        while self.match_any(&[TokenType::Star, TokenType::Slash, TokenType::Mod]) {
+            let op = self.previous().token_type;
+            let right = self.unary();
+            expr = match op {
+                TokenType::Star => Expr::Mult(Box::new(expr), Box::new(right), self.get_span()),
+                TokenType::Slash => Expr::Div(Box::new(expr), Box::new(right), self.get_span()),
+                TokenType::Mod => Expr::Mod(Box::new(expr), Box::new(right), self.get_span()),
+                _ => unreachable!(),
+            };
+        }
+
+        expr
+    }
+
+    fn unary(&mut self) -> Expr {
+        if self.match_any(&[TokenType::Minus]) {
+            return Expr::Sub(
+                Box::new(Expr::Nothing()),
+                Box::new(self.unary()),
+                self.get_span(),
+            );
+        }
+
+        if self.match_any(&[TokenType::Plus]) {
+            return Expr::Add(
+                Box::new(Expr::Nothing()),
+                Box::new(self.unary()),
+                self.get_span(),
+            );
+        }
+
+        if self.match_any(&[TokenType::Bang]) {
+            return Expr::Not(Box::new(self.unary()), self.get_span());
+        }
+
+        if self.match_any(&[TokenType::And]) {
+            // ref: create a reference to a variable
+            return if self.check(TokenType::Ident) {
+                self.advance(); // consume the identifier
+                let inner = Box::new(Expr::Variable(
+                    self.previous().lexeme.clone(),
+                    self.get_span(),
+                ));
+                Expr::Ref(inner, self.get_span())
+            } else {
+                error(self.get_span(), "Expected identifier after '&'.", "parsing");
+                Expr::Nothing()
+            };
+        }
+
+        if self.match_any(&[TokenType::Star]) {
+            let inner = Box::new(self.unary());
+            return Expr::Deref(inner, self.get_span());
+        }
+
+        self.power()
+    }
+
+    fn power(&mut self) -> Expr {
+        let mut expr = self.member();
+
+        while self.match_any(&[TokenType::StarStar]) {
+            expr = Expr::Power(Box::new(expr), Box::new(self.member()), self.get_span());
+        }
+
+        expr
+    }
+    fn nth(&mut self) -> Expr {
+        let val = self.primary();
+        if self.match_any(&[TokenType::LeftBrack]) {
+            let expr = self.expression();
+            self.consume(TokenType::RightBrack, "Expected ']' after indexing.");
+            Expr::Nth(Box::new(val), Box::new(expr), self.get_span())
+        } else {
+            val
+        }
+    }
+
+    fn vector_lit(&mut self) -> Expr {
+        if self.match_any(&[TokenType::LeftBrace]) {
+            let mut exprs = vec![];
+
+            let mut last_expr = false;
+            while !self.match_any(&[TokenType::RightBrace]) && !last_expr {
+                let expr = self.expression();
+                exprs.push(expr);
+                if !self.match_any(&[TokenType::Comma]) {
+                    last_expr = true;
+                }
+            }
+
+            Expr::Vector(exprs)
+        } else {
+            self.consume(TokenType::LeftBrace, "Expected '{' after '\\''.");
+            Expr::Nothing()
+        }
+    }
+
+    fn array_lit(&mut self) -> Expr {
+        let mut exprs = vec![];
+
+        let mut last_expr = false;
+        while !self.match_any(&[TokenType::RightBrack]) && !last_expr {
+            let expr = self.expression();
+            exprs.push(expr);
+            if !self.match_any(&[TokenType::Comma]) {
+                last_expr = true;
+            }
+        }
+
+        Expr::Array(exprs)
+    }
+
+    // ---------- PRIMARY ----------
+    fn primary(&mut self) -> Expr {
+        if self.match_any(&[TokenType::LeftBrace]) {
+            return self.statement_block();
+        }
+
+        if self.check(TokenType::Ident) {
+            let item = self.item();
+
+            if self.check(TokenType::LeftParen) || self.check(TokenType::LessLess) {
+                return self.call_function(item);
+            }
+            return Expr::Variable(item, self.get_span());
+        }
+
+        if self.match_any(&[TokenType::Float]) {
+            return Expr::Float(self.previous().literal.parse().unwrap_or(0.0));
+        }
+
+        if self.match_any(&[TokenType::Int]) {
+            return Expr::Int(self.previous().literal.parse().unwrap_or(0));
+        }
+
+        if self.match_any(&[TokenType::True]) {
+            return Expr::Bool(true);
+        }
+
+        if self.match_any(&[TokenType::False]) {
+            return Expr::Bool(false);
+        }
+
+        if self.match_any(&[TokenType::String]) {
+            return Expr::Str(self.previous().literal.clone());
+        }
+
+        if self.match_any(&[TokenType::Char]) {
+            return Expr::Char(self.previous().literal.clone());
+        }
+
+        if self.match_any(&[TokenType::LeftParen]) {
+            let expr = self.expression();
+            self.consume(TokenType::RightParen, "Expected ')'.");
+            return expr;
+        }
+
+        if self.match_any(&[TokenType::QuestionMark]) {
+            return self.if_statement(true);
+        }
+
+        if self.match_any(&[TokenType::This]) {
+            return Expr::This(self.get_span());
+        }
+
+        if self.match_any(&[TokenType::Lam]) {
+            return self.define_lambda();
+        }
+
+        if self.match_any(&[TokenType::BackSlash]) {
+            return self.vector_lit();
+        }
+
+        if self.match_any(&[TokenType::LeftBrack]) {
+            return self.array_lit();
+        }
+
+        Expr::Nothing()
+    }
+
+    fn get_type(&mut self) -> Type {
+        if self.match_any(&[TokenType::Ident]) {
+            let name = self.previous().lexeme.clone();
+
+            if self.match_any(&[TokenType::LessLess]) {
+                let mut gens = vec![];
+
+                loop {
+                    gens.push(self.get_type());
+                    if !self.match_any(&[TokenType::Comma]) {
+                        break;
+                    }
+                }
+
+                self.consume(TokenType::GreaterGreater, "Expected '>' after generics");
+                return Type::with_generics(&name, gens);
+            }
+
+            return Type::simple(&name);
+        } else if self.match_any(&[TokenType::LeftBrack]) {
+            let mut gens = vec![];
+
+            loop {
+                gens.push(self.get_type());
+                if !self.match_any(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+
+            self.consume(TokenType::RightBrack, "Expected '>' after generics");
+            return Type::with_generics("arr", gens);
+        } else if self.match_any(&[TokenType::And]) {
+            return Type::with_generics("ref", vec![self.get_type()]);
+        }
+
+        error(self.get_span(), "Expected type", "parsing");
+
+        nil_type()
+    }
+
+    // ---------- UTIL ----------
+    fn get_span(&self) -> Span {
+        let token = self.previous();
+        Span {
+            line: token.line,
+            column: token.column,
+        }
+    }
+
+    fn item(&mut self) -> String {
+        self.consume(TokenType::Ident, "Expected item.");
+        let item = self.previous().lexeme.clone();
+        item
+    }
+
+    fn ident(&mut self) -> String {
+        self.consume(TokenType::Ident, "Expected identifier.");
+        let ident = self.previous().lexeme.clone();
+        ident
+    }
+
+    fn match_any(&mut self, types: &[TokenType]) -> bool {
+        for t in types {
+            if self.check(*t) {
+                self.advance();
+                return true;
+            }
+        }
+        false
+    }
+    fn check(&self, token_type: TokenType) -> bool {
+        !self.is_at_end() && self.peek().token_type == token_type
+    }
+
+    fn peek_next(&self, token_type: TokenType) -> bool {
+        self.tokens
+            .get(self.current + 1)
+            .map(|t| t.token_type == token_type)
+            .unwrap_or(false)
+    }
+
+    fn peek_next_next(&self, token_type: TokenType) -> bool {
+        self.tokens
+            .get(self.current + 2)
+            .map(|t| t.token_type == token_type)
+            .unwrap_or(false)
+    }
+
+    fn consume(&mut self, token_type: TokenType, message: &str) -> Token {
+        if self.check(token_type) {
+            self.advance()
+        } else {
+            let t = self.peek();
+            error(
+                self.get_span(),
+                format!("{} Found: {}", message, t.token_type).as_str(),
+                "parsing",
+            );
+            self.advance();
+            Token::nil()
+        }
+    }
+
+    fn advance(&mut self) -> Token {
+        if !self.is_at_end() {
+            self.current += 1;
+        }
+        self.previous()
+    }
+
+    fn is_at_end(&self) -> bool {
+        self.peek().token_type == TokenType::EOF
+    }
+
+    fn peek(&self) -> Token {
+        self.tokens
+            .get(self.current)
+            .cloned()
+            .unwrap_or_else(Token::nil)
+    }
+
+    fn previous(&self) -> Token {
+        self.tokens
+            .get(self.current.saturating_sub(1))
+            .cloned()
+            .unwrap_or_else(Token::nil)
+    }
+}
+
+// Grammar:
+/*
+statement_block -> "{" ( statement )* "}"
+statement       -> ( print | declaration | expression | return | function ) ";"
+
+print           -> "$" ( "$" )? expression
+declaration     -> "#" ( "@" )? IDENTIFIER ( ":" type )? ( "=" expression )? // need one or both
+return          -> "ret" expression
+while           -> "£" expression statement_block
+
+if_statement    -> "?" expression statement_block ( "~?" expression statement_block )* ( "~" statement_block )?
+function_call   -> IDENTIFIER "(" (expression)* ")"
+function        -> "fn" ( "<<" IDENTIFIER* ">>" )? IDENTIFIER ( "(" (IDENTIFIER ":" IDENTIFIER)* ")" )? type? statement_block
+
+type            -> IDENTIFIER | "[" type* "]" | "<<" type* ">>"
+
+expression      -> bool
+bool            -> compare ( ( "&" | "|" ) compare )*
+compare         -> term ( ( "==" | ">=" | "<=" | ">" | "<" | "!=" ) term )*
+term            -> factor ( ( "+" | "-" ) factor )*
+factor          -> unary ( ( "*" | "/" | "%" ) unary )*
+unary           -> ( "-" | "+" ) unary | power
+power           -> nth ( ( "**" ) nth )*
+nth             -> primary ( "[" expression "]" )?
+primary         -> NUMBER | STRING | BOOLEAN | IDENTIFIER | "(" expression ")" | statement_block | if_statement | function_call
+
+*/

@@ -1,0 +1,8 @@
+{
+  "id": "1",
+  "subject": "Fix function parameter scope bug in pre_transpile and to_c",
+  "description": "Function parameters declared in `use`-d files are not visible during `returned_type`/`to_c` because `returned_type` is called before the parameter scope is pushed. Fix both `pre_transpile` and `to_c` for `DeclareFunction`.",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

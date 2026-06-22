@@ -1,0 +1,8 @@
+{
+  "id": "5",
+  "subject": "Add tests for vec type",
+  "description": "Add parser tests and transpiler tests for vec type - vector literal parsing, type resolution, push/clone_vec/pop function calls",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

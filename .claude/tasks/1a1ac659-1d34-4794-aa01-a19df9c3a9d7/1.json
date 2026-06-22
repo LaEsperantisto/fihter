@@ -1,0 +1,8 @@
+{
+  "id": "1",
+  "subject": "Fix remaining missing C functions",
+  "description": "Two missing functions remain:\n1. v_12s_0Ct_4CDD — _greater_equal (or _less_equal) for char\n2. v_6s_0Ct_0CDD — _intput or print for i32 — called with i32+1 (add), seems like intput(i32) is being called",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

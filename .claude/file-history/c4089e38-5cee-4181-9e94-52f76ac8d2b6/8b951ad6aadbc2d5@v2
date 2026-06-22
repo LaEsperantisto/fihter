@@ -1,0 +1,246 @@
+/**
+ * GO BOARD ENGINE - GOOGLE SHEETS
+ * Configuration Constants
+ */
+const B_COLOR = "#000000";
+const B_STONE = "⬤";
+const W_COLOR = "#ffffff";
+const W_STONE = "◯";
+const BOARD_COLOR = "#f3b562";
+const BOARD_RANGE = "A1:S19";
+const MOVE_CELL = "U1";
+const RESET_CELL = "U2";
+const UNDO_CELL = "U3";
+
+/**
+ * Trigger function: Runs automatically when you type in a cell.
+ */
+function onEdit(e) {
+  const range = e.range;
+  const sheet = range.getSheet();
+  const row = range.getRow();
+  const col = range.getColumn();
+
+  if (sheet.getName() !== "Current Board") return;
+
+  if (range.getA1Notation() === RESET_CELL) {
+    range.setValue("");
+    resetBoard();
+    backupBoard();
+    return;
+  }
+
+  if (range.getA1Notation() === UNDO_CELL) {
+    range.setValue("");
+    overwriteBoard();
+    return;
+  }
+
+  if (row < 1 || col < 1 || row > 19 || col > 19) return;
+
+  const turnCell = sheet.getRange(MOVE_CELL);
+  const turnStatus = turnCell.getValue();
+  let currentTurn = (turnStatus.includes("White") || turnStatus === "W") ? "W" : "B";
+
+  const stoneSymbol = (currentTurn === "B") ? B_STONE : W_STONE;
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const previousBoardSheet = ss.getSheetByName("Previous Board");
+  const previousCell = previousBoardSheet.getRange(range.getA1Notation());
+
+  if (previousCell.getValue() !== "") { overwriteBoard(); return; }
+
+  range.setValue(stoneSymbol);
+
+  backupBoard();
+  
+  // Run game logic
+  checkAndRedraw(sheet);
+
+  // Switch turn
+  const nextTurnName = (currentTurn === "B") ? "White" : "Black";
+  const nextTurnColor = (currentTurn === "B") ? W_COLOR : B_COLOR;
+  const nextFontColor = (currentTurn === "B") ? B_COLOR : W_COLOR;
+
+  turnCell.setValue("Next Turn: " + nextTurnName)
+          .setBackground(nextTurnColor)
+          .setFontColor(nextFontColor);
+}
+
+/**
+ * Get full connected group
+ */
+function getGroup(r, c, boardData, visited = new Set()) {
+  const key = `${r},${c}`;
+  if (visited.has(key)) return [];
+
+  const color = boardData[r][c];
+  if (!color) return [];
+
+  visited.add(key);
+
+  let group = [{ r, c }];
+
+  const neighbors = [
+    { r, c: c + 1 },
+    { r, c: c - 1 },
+    { r: r + 1, c },
+    { r: r - 1, c },
+  ];
+
+  for (const n of neighbors) {
+    if (boardData[n.r]?.[n.c] === color) {
+      group = group.concat(getGroup(n.r, n.c, boardData, visited));
+    }
+  }
+
+  return group;
+}
+
+/**
+ * Check if a group has liberties
+ */
+function groupHasLiberties(group, boardData) {
+  for (const { r, c } of group) {
+    const neighbors = [
+      { r, c: c + 1 },
+      { r, c: c - 1 },
+      { r: r + 1, c },
+      { r: r - 1, c },
+    ];
+
+    for (const n of neighbors) {
+      if (boardData[n.r]?.[n.c] === "") {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Main engine
+ */
+function checkAndRedraw(sheet) {
+  const range = sheet.getRange(BOARD_RANGE);
+  let boardData = range.getValues();
+
+  let checked = new Set();
+
+  // --- GAME LOGIC ---
+  for (let r = 0; r < boardData.length; r++) {
+    for (let c = 0; c < boardData[r].length; c++) {
+      const key = `${r},${c}`;
+      if (checked.has(key)) continue;
+
+      const val = boardData[r][c];
+      if (!val) continue;
+
+      const group = getGroup(r, c, boardData);
+
+      // mark checked
+      group.forEach(({ r, c }) => checked.add(`${r},${c}`));
+
+      if (!groupHasLiberties(group, boardData)) {
+        for (const { r, c } of group) {
+          boardData[r][c] = "";
+        }
+      }
+    }
+  }
+
+  // Apply updated board
+  range.setValues(boardData);
+
+  // --- RENDER ---
+  let bgColors = [];
+  let fontColors = [];
+
+  for (let r = 0; r < boardData.length; r++) {
+    let bgRow = [];
+    let fontRow = [];
+
+    for (let c = 0; c < boardData[r].length; c++) {
+      const val = boardData[r][c];
+
+      if (val === B_STONE || val === W_STONE) {
+        fontRow.push("black");
+      } else {
+        fontRow.push(BOARD_COLOR);
+      }
+
+      bgRow.push(BOARD_COLOR);
+    }
+
+    bgColors.push(bgRow);
+    fontColors.push(fontRow);
+  }
+
+  range.setBackgrounds(bgColors)
+       .setFontColors(fontColors)
+       .setHorizontalAlignment("center")
+       .setVerticalAlignment("middle")
+       .setFontSize(20);
+}
+
+/**
+ * Reset board
+ */
+function resetBoard() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const range = sheet.getRange(BOARD_RANGE);
+
+  range.clearContent()
+       .setBackground(BOARD_COLOR)
+       .setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID);
+
+  const turnCell = sheet.getRange(MOVE_CELL);
+  turnCell.setValue("Next Turn: Black")
+          .setBackground(B_COLOR)
+          .setFontColor(W_COLOR);
+}
+
+function ensureSheetsExist() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const names = ["Previous Board", "Before Previous Board"];
+
+  for (const name of names) {
+    let sheet = ss.getSheetByName(name);
+    if (!sheet) {
+      sheet = ss.insertSheet(name);
+      sheet.getRange(BOARD_RANGE)
+           .setBackground(BOARD_COLOR)
+           .setHorizontalAlignment("center")
+           .setVerticalAlignment("middle")
+           .setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID);
+    }
+  }
+}
+
+function backupBoard() {
+  ensureSheetsExist();
+  copyBoard("Previous Board", "Before Previous Board");
+  copyBoard("Current Board", "Previous Board");
+}
+
+function overwriteBoard() {
+  ensureSheetsExist();
+  copyBoard("Previous Board", "Current Board");
+  copyBoard("Before Previous Board", "Previous Board");
+}
+
+function copyBoard(source, target) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  const sourceSheet = ss.getSheetByName(source);
+  const targetSheet = ss.getSheetByName(target);
+
+  if (!sourceSheet || !targetSheet) {
+    throw new Error("One of the sheets does not exist.");
+  }
+
+  const sourceRange = sourceSheet.getRange(BOARD_RANGE);
+  const targetRange = targetSheet.getRange(BOARD_RANGE);
+
+  sourceRange.copyTo(targetRange, SpreadsheetApp.CopyPasteType.PASTE_VALUES, false);
+}
