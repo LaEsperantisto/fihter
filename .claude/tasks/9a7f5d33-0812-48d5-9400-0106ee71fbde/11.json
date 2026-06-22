@@ -1,8 +1,0 @@
-{
-  "id": "11",
-  "subject": "Update README with new features and known issues",
-  "description": "Document @param syntax, fix outdated claims, add known issues section",
-  "status": "pending",
-  "blocks": [],
-  "blockedBy": []
-}

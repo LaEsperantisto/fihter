@@ -1,8 +1,0 @@
-{
-  "id": "12",
-  "subject": "Add missing tests",
-  "description": "Add scanner, parser, transpiler, and type env tests for previously untested code",
-  "status": "pending",
-  "blocks": [],
-  "blockedBy": []
-}

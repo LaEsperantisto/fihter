@@ -1,8 +1,0 @@
-{
-  "id": "7",
-  "subject": "Add tests for ref/deref/generic types",
-  "description": "Add parser tests and transpiler tests for Ref, Deref, and generic ref types",
-  "status": "pending",
-  "blocks": [],
-  "blockedBy": []
-}

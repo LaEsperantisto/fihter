@@ -1,8 +1,0 @@
-{
-  "id": "3",
-  "subject": "Add Ref and Deref to Expr enum",
-  "description": "Add Expr::Ref(Box<Expr>, Span) and Expr::Deref(Box<Expr>, Span) variants",
-  "status": "pending",
-  "blocks": [],
-  "blockedBy": []
-}

@@ -1,8 +1,0 @@
-{
-  "id": "5",
-  "subject": "Update parser for ref keyword and &/* operators",
-  "description": "Add ref keyword to scanner, parse & as Ref and * as Deref in unary ops, parse ref keyword as Ref expression",
-  "status": "pending",
-  "blocks": [],
-  "blockedBy": []
-}

@@ -1,8 +1,0 @@
-{
-  "id": "6",
-  "subject": "Update transpiler for Ref/Deref",
-  "description": "Add get_type, returned_type, and to_c handlers for Ref and Deref expressions",
-  "status": "pending",
-  "blocks": [],
-  "blockedBy": []
-}

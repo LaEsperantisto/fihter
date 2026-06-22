@@ -1,8 +1,0 @@
-{
-  "id": "10",
-  "subject": "Update transpiler to use param mutability",
-  "description": "Replace hardcoded false with arg.2 in to_c and pre_transpile",
-  "status": "pending",
-  "blocks": [],
-  "blockedBy": []
-}

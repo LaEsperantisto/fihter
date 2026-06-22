@@ -1,8 +1,0 @@
-{
-  "id": "7",
-  "subject": "Clean up generated .c files and executables",
-  "description": "Remove any .c files and executables created during testing",
-  "status": "completed",
-  "blocks": [],
-  "blockedBy": []
-}
