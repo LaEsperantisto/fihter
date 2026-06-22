@@ -273,8 +273,6 @@ function chooseRandomLevel(forcedIndex = null) {
     let index = forcedIndex !== null ? forcedIndex : Math.floor(Math.random() * levels.length);
     level = levels[index];
 
-    level = levels[6];
-
     return index;
 }
 
