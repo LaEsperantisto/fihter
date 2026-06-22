@@ -99,25 +99,25 @@ const levels = [
     [
         { x: 0, y: 536, width: 1024, height: 40, downable: false },
         // Left House: Walls & Floor
-        { x: 100, y: 380, width: 20, height: 160, downable: false }, // Left wall
-        { x: 260, y: 380, width: 20, height: 160, downable: false }, // Right wall
+        { x: 100, y: 360, width: 20, height: 190, downable: false }, // Left wall
+        { x: 260, y: 360, width: 20, height: 190, downable: false }, // Right wall
         { x: 120, y: 450, width: 140, height: 15, downable: true },  // Second floor inside
         // Left House: Stepped Triangular Roof
-        { x: 80, y: 380, width: 220, height: 20, downable: false },  // Roof Base
-        { x: 110, y: 350, width: 160, height: 30, downable: false }, // Roof Mid
-        { x: 150, y: 320, width: 80, height: 30, downable: false },  // Roof Peak
+        { x: 80, y: 360, width: 220, height: 20, downable: false },  // Roof Base
+        { x: 110, y: 330, width: 160, height: 30, downable: false }, // Roof Mid
+        { x: 150, y: 300, width: 80, height: 30, downable: false },  // Roof Peak
 
         // Right House: Walls & Floor
-        { x: 744, y: 380, width: 20, height: 160, downable: false }, 
-        { x: 904, y: 380, width: 20, height: 160, downable: false }, 
+        { x: 744, y: 360, width: 20, height: 190, downable: false }, 
+        { x: 904, y: 360, width: 20, height: 190, downable: false }, 
         { x: 764, y: 450, width: 140, height: 15, downable: true },  
         // Right House: Stepped Triangular Roof
-        { x: 724, y: 380, width: 220, height: 20, downable: false }, 
-        { x: 754, y: 350, width: 160, height: 30, downable: false }, 
-        { x: 794, y: 320, width: 80, height: 30, downable: false },
+        { x: 724, y: 360, width: 220, height: 20, downable: false }, 
+        { x: 754, y: 330, width: 160, height: 30, downable: false }, 
+        { x: 794, y: 300, width: 80, height: 30, downable: false },
 
         // Center connecting courtyard bridge
-        { x: 387, y: 330, width: 250, height: 20, downable: true }
+        { x: 387, y: 220, width: 250, height: 20, downable: true }
     ],
     // Level 8: Windmill Ridge (A tall central tower with offset platforms representing blades)
     [
@@ -173,7 +173,98 @@ const levels = [
         // Outer balconies
         { x: 50, y: 320, width: 100, height: 15, downable: true },
         { x: 874, y: 320, width: 100, height: 15, downable: true }
-    ]
+    ],
+    // Level 11: The Subterranean Lava Trench (Hazardous central pit with floating islands)
+    [
+        { x: 0, y: 536, width: 250, height: 40, downable: false },
+        // Lava Hazard in the center floor
+        { x: 250, y: 546, width: 524, height: 30, downable: false, kill: true }, 
+        { x: 774, y: 536, width: 250, height: 40, downable: false },
+        
+        // Floating safety steps above the lava
+        { x: 312, y: 420, width: 120, height: 20, downable: true },
+        { x: 592, y: 420, width: 120, height: 20, downable: true },
+        { x: 437, y: 300, width: 150, height: 20, downable: true },
+        
+        // Side escape ledges
+        { x: 80, y: 330, width: 120, height: 20, downable: true },
+        { x: 824, y: 330, width: 120, height: 20, downable: true }
+    ],
+    // Level 12: Electric Gridlock (Alternating floors and ceiling hazard)
+    [
+        { x: 0, y: 536, width: 1024, height: 40, downable: false },
+        // Dangerous central electric barrier on the ground
+        { x: 412, y: 506, width: 200, height: 30, downable: false, kill: true },
+        
+        // Tier 1 side platforms
+        { x: 120, y: 400, width: 220, height: 20, downable: true },
+        { x: 684, y: 400, width: 220, height: 20, downable: true },
+        
+        // Tier 2 Center safety bridge with hazard hot spots on its edges
+        { x: 312, y: 280, width: 50, height: 20, downable: false, kill: true },
+        { x: 362, y: 280, width: 300, height: 20, downable: true },
+        { x: 662, y: 280, width: 50, height: 20, downable: false, kill: true },
+        
+        // Top sniper perches
+        { x: 180, y: 160, width: 120, height: 20, downable: true },
+        { x: 724, y: 160, width: 120, height: 20, downable: true }
+    ],
+    // Level 13: Spike-Drop Chamber (High drops with localized death zones)
+    [
+        { x: 0, y: 536, width: 1024, height: 40, downable: false },
+        // Two localized spike pits flanking the center
+        { x: 200, y: 521, width: 100, height: 15, downable: false, kill: true },
+        { x: 724, y: 521, width: 100, height: 15, downable: false, kill: true },
+        
+        // Overhead shields protecting from straight falls into spikes
+        { x: 150, y: 390, width: 200, height: 20, downable: true },
+        { x: 674, y: 390, width: 200, height: 20, downable: true },
+        
+        // Main structural core in the center
+        { x: 437, y: 270, width: 150, height: 20, downable: false },
+        { x: 487, y: 150, width: 50, height: 120, downable: false }
+    ],
+    // Level 14: The Acid Factory (Divided chambers with toxic waste pipes)
+    [
+        { x: 0, y: 536, width: 1024, height: 40, downable: false },
+        // Giant vertical dividing walls forming a central waste zone
+        { x: 320, y: 250, width: 30, height: 286, downable: false },
+        { x: 674, y: 250, width: 30, height: 286, downable: false },
+        
+        // Acid pool trapped between the two interior walls
+        { x: 350, y: 521, width: 324, height: 15, downable: false, kill: true },
+        
+        // Left Chamber steps
+        { x: 0, y: 400, width: 150, height: 20, downable: true },
+        { x: 170, y: 290, width: 150, height: 20, downable: true },
+        
+        // Right Chamber steps
+        { x: 874, y: 400, width: 150, height: 20, downable: true },
+        { x: 704, y: 290, width: 150, height: 20, downable: true },
+        
+        // High risk catwalk directly over the acid pool
+        { x: 412, y: 210, width: 200, height: 20, downable: true }
+    ],
+    // Level 15: Sky Gauntlet (No ground safety net, pure platforming hazard)
+    [
+        // The floor is completely covered in lasers/spikes—touching the bottom is death
+        { x: 0, y: 536, width: 1024, height: 40, downable: false, kill: true },
+        
+        // Left and Right safe spawn bases
+        { x: 0, y: 420, width: 150, height: 30, downable: false },
+        { x: 874, y: 420, width: 150, height: 30, downable: false },
+        
+        // The climbing matrix
+        { x: 220, y: 330, width: 140, height: 20, downable: true },
+        { x: 664, y: 330, width: 140, height: 20, downable: true },
+        
+        // Dangerous central hot plate blocking the short path
+        { x: 462, y: 260, width: 100, height: 20, downable: false, kill: true },
+        
+        // Upper escape routes
+        { x: 312, y: 160, width: 120, height: 20, downable: true },
+        { x: 592, y: 160, width: 120, height: 20, downable: true }
+    ],
 ];
 
 let level;
@@ -181,6 +272,8 @@ let level;
 function chooseRandomLevel(forcedIndex = null) {
     let index = forcedIndex !== null ? forcedIndex : Math.floor(Math.random() * levels.length);
     level = levels[index];
+
+    level = levels[6];
 
     return index;
 }
@@ -233,7 +326,7 @@ class Arrow {
                         hitTarget = true;
                     
                         const owner = characters.find(c => c.id === this.ownerId);
-                        owner.kills++;
+                        if (owner) owner.kills++;
 
                         updateUI();
 
@@ -409,7 +502,7 @@ class Character {
                             this.y + this.height > plat.y;
                 
                 if (isInside) {
-                    plat.owner.kills++;
+                    if (plat.owner) plat.owner.kills++;
                     this.takeDamage();
                     return; 
                 }
@@ -1095,7 +1188,7 @@ function checkSwordCollisions() {
                 
                 if (gameMode !== 'multiplayer' || isHost) {
                     target.takeDamage();
-                    attacker.kills++;
+                    if (attacker.kills) attacker.kills++;
                 }
                 attacker.isAttackingSword = false; 
                 break; 
